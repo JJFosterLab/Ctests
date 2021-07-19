@@ -45,6 +45,7 @@ require(CircStats)#package for circular hypothesis tests
 csv_sep = ','#Is the csv comma separated or semicolon separated? For tab sep, use "\t"
 group_factor = "stimulus" #The title of the column; NO SPACES PLEASE
 angle_name = "angles" #The title of the column with angles; NO SPACES PLEASE
+angle_unit = "degrees" # "degrees" or "radians"
 
 #Check the operating system and assign a logical flag (T or F)
 sys_win <- Sys.info()[['sysname']] == 'Windows'
@@ -64,7 +65,7 @@ if(sys_win){
     #                     {suppressWarnings(rvonmises(n = 1,mu = mm, kappa = 3))}
     #                     )
     # sim = data.frame(stimulus = sort(rep(1:n_phases, n_angles)),
-    #                  angle = angles_sim
+    #                  angle = round(angles_sim*180/pi)
     #                  )
     # write.table(x = sim,
     #             file = file.path(ltp,'Documents', "simulated_angles.csv"),
@@ -108,7 +109,7 @@ View(adata)#show the user the data that was
 
 # Perform Mardia Watson Wheeler test --------------------------------------
 mww_test = with(adata,
-                watson.wheeler.test( x = angle,
+                watson.wheeler.test( x = circular(angle, units = angle_unit),
                                 group = stimulus
                                )
 )
