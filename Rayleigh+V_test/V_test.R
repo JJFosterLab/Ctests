@@ -2,7 +2,7 @@
 graphics.off()
 # Details ---------------------------------------------------------------
 #       AUTHOR:	James Foster              DATE: 2021 07 19
-#     MODIFIED:	James Foster              DATE: 2021 07 19
+#     MODIFIED:	James Foster              DATE: 2021 07 20
 #
 #  DESCRIPTION: Loads a text file and performs a V test for uniformity compared 
 #               to an expected mean angle (more powerfule than Rayleigh test).
@@ -12,7 +12,7 @@ graphics.off()
 #               
 #      OUTPUTS: Results table (.csv).
 #
-#	   CHANGES: - 
+#	   CHANGES: - Suppressed package loading messages (upset users)
 #             - 
 #             - 
 #
@@ -35,12 +35,12 @@ graphics.off()
 # Useful functions --------------------------------------------------------
 # . Load package ----------------------------------------------------------
 #needs installing before first use (in Rstudio, see automatic message)
-require(circular)#package for handling cirular data
-require(CircStats)#package for circular hypothesis tests
-
-
-
-
+suppressMessages(#these are disturbing users unnecessarily
+  {
+  require(circular)#package for handling cirular data
+  require(CircStats)#package for circular hypothesis tests
+  }
+)
 
 
 
@@ -134,7 +134,7 @@ co_rayv_test = capture.output(rayv_test)
 #save result
 write.table(x = with(rayv_test,#save relevant info in a table
                      cbind(data = path_file,
-                           test = paste('(V test)' , co_ray_test[2]),
+                           test = paste('(V test)' , co_rayv_test[2]),
                            h0 = 'the distribution of angles is uniform',
                            h1 = 'angles are from a unimodal von Mises distribution centred on the expected mean angle',
                            R_statistic = statistic,

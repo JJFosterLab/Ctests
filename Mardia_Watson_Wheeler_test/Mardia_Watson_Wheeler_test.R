@@ -2,7 +2,7 @@
 graphics.off()
 # Details ---------------------------------------------------------------
 #       AUTHOR:	James Foster              DATE: 2021 07 19
-#     MODIFIED:	James Foster              DATE: 2021 07 19
+#     MODIFIED:	James Foster              DATE: 2021 07 20
 #
 #  DESCRIPTION: Loads a text file and performs a Mardia-Watson-Wheeler test
 #               for equality of distributions.
@@ -13,7 +13,7 @@ graphics.off()
 #               
 #      OUTPUTS: Results table (.csv).
 #
-#	   CHANGES: - 
+#	   CHANGES: - Suppressed package loading messages (upsetting users)
 #             - 
 #             - 
 #
@@ -29,19 +29,19 @@ graphics.off()
 #TODO   ---------------------------------------------
 #TODO   
 #- Read in data   +
-#- Perform test     
-#- Test with simulated data 
-#- Save results
+#- Perform test     +
+#- Test with simulated data +
+#- Save results +
 
 # Useful functions --------------------------------------------------------
 # . Load package ----------------------------------------------------------
 #needs installing before first use (in Rstudio, see automatic message)
-require(circular)#package for handling cirular data
-require(CircStats)#package for circular hypothesis tests
-
-
-
-
+suppressMessages(#these are disturbing users unnecessarily
+  {
+  require(circular)#package for handling cirular data
+  require(CircStats)#package for circular hypothesis tests
+  }
+)
 
 
 # Input Variables ----------------------------------------------------------
