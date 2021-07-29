@@ -14,7 +14,7 @@ graphics.off()
 #               ("ID"), a column of conditions ("condition") and a column of
 #               mean vector lengths ("rho"), or other non-circular variable,
 #               or angles ("angle") if a mean vector needs to be calculated.
-#               User should specify test details (line 50).
+#               User should specify test details (line 70).
 #               
 #      OUTPUTS: Results table (.csv).
 #
