@@ -119,7 +119,31 @@ stack = TRUE,
 bins = 360/5,
 sep = 0.05
 )
-
+arrows.circular(x = mean.circular(circular(x = adata$angle, 
+                                           type = 'angles',
+                                           unit = 'degrees',
+                                           template = 'geographics',
+                                           modulo = '2pi',
+                                           zero = 'pi',
+                                           rotation = 'clock'
+)),
+y = rho.circular(circular(x = adata$angle, 
+                          type = 'angles',
+                          unit = 'degrees',
+                          template = 'geographics',
+                          modulo = '2pi',
+                          zero = 'pi',
+                          rotation = 'clock'
+))
+)
+suppressWarnings(
+  {
+lines.circular(x = seq(from = -pi,to = pi, length.out = 1e3),
+               y = -1+rep( x = sqrt(-log(0.05)/length(adata$angle)), times = 1e3),
+               lty = 2
+               )
+  }
+)
 # Perform Rayleigh test ---------------------------------------------------
 ray_test = with(adata,
                 rayleigh.test( x = circular(angle, unit = angle_unit)
