@@ -2,7 +2,7 @@
 graphics.off()
 # Details ---------------------------------------------------------------
 #       AUTHOR:	James Foster              DATE: 2021 07 19
-#     MODIFIED:	James Foster              DATE: 2021 07 20
+#     MODIFIED:	James Foster              DATE: 2021 11 11
 #
 #  DESCRIPTION: Loads a text file and performs a V test for uniformity compared 
 #               to an expected mean angle (more powerfule than Rayleigh test).
@@ -13,8 +13,8 @@ graphics.off()
 #      OUTPUTS: Results table (.csv).
 #
 #	   CHANGES: - Suppressed package loading messages (upset users)
-#             - 
-#             - 
+#             - Plot critical mean in expected direction
+#             - Handle BOM in input
 #
 #   REFERENCES: Batschelet E (1981).
 #               The Rayleigh test, Chap 4.2, p. 54
@@ -28,9 +28,9 @@ graphics.off()
 #TODO   ---------------------------------------------
 #TODO   
 #- Read in data   +
-#- Perform test     
-#- Test with simulated data 
-#- Save results
+#- Perform test     +
+#- Test with simulated data +
+#- Save results +
 
 # Useful functions --------------------------------------------------------
 # . Load package ----------------------------------------------------------
@@ -99,11 +99,21 @@ if(is.null(path_file))
 {stop('No file selected.')}else
 {print(path_file)}
 
+#Check for Byte Order Marks, which can make a mess
+if(grepl(x = readLines(path_file,
+                       n = 1,
+                       warn = F),#check the first line of the file, where "angle" should be written
+         pattern = "ï|ÿ|þ")#common BOM renderings, are there any others?
+)
+{utf8BOM = T}else{utf8BOM = F}
 
 # Read in file ------------------------------------------------------------
 adata = read.table(file = path_file,#read from user-selected file
                    header = T,#read the file header to use for variable names
-                   sep = csv_sep#,#values are separated by the user-specified character
+                   sep = csv_sep,#values are separated by the user-specified character
+                   fileEncoding = ifelse(test = utf8BOM, #If the file contains Byte Order Markers
+                                         yes = "UTF-8-BOM",#read in using the appropriate format
+                                         no = "")#, #if not, R can guess
                    #other parameters can be added here for troubleshooting
 )
 
@@ -113,12 +123,47 @@ plot.circular(x = circular(x = adata$angle,
                            unit = 'degrees',
                            template = 'geographics',
                            modulo = '2pi',
-                           zero = 'pi',
+                           zero = pi/2,
                            rotation = 'clock'
 ),
 stack = TRUE,
 bins = 360/5,
 sep = 0.05
+)
+arrows.circular(x = circular(x = expected_mean_angle, 
+                                           type = 'angles',
+                                           unit = 'degrees',
+                                           #template = 'geographics',
+                                           modulo = '2pi',
+                                           zero = pi/2,
+                                           rotation = 'clock'
+                                          ),
+                y = 1,
+                lwd = 5, 
+                col = rgb(0,0,0,0.1),
+                length = 0
+)
+arrows.circular(x = circular(x = expected_mean_angle, 
+                                           type = 'angles',
+                                           unit = 'degrees',
+                                           template = 'geographics',
+                                           modulo = '2pi',
+                                           zero = pi/2,
+                                           rotation = 'clock'
+                                          ),
+                y = mean(
+                      cos((adata$angle - expected_mean_angle) * pi/180), 
+                        na.rm = T)
+)
+suppressWarnings(
+  {
+    lines.circular(x = seq(from = -expected_mean_angle*pi/180+pi/6 +pi/2,#or: bearing - pi/2
+                           to = -expected_mean_angle*pi/180-pi/6 +pi/2, #or: bearing + pi/2
+                           length.out = 1e3),
+                   y = -1+rep( x = 1.644854/(sqrt(2 * length(adata$angle))), times = 1e3),
+                   lty = 2
+    )
+  }
 )
 
 # Perform V test ----------------------------------------------------------
