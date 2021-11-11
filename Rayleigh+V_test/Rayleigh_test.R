@@ -2,7 +2,7 @@
 graphics.off()
 # Details ---------------------------------------------------------------
 #       AUTHOR:	James Foster              DATE: 2021 07 19
-#     MODIFIED:	James Foster              DATE: 2021 07 20
+#     MODIFIED:	James Foster              DATE: 2021 11 11
 #
 #  DESCRIPTION: Loads a text file and performs a Rayleigh test for uniformity.
 #               
@@ -12,8 +12,8 @@ graphics.off()
 #      OUTPUTS: Results table (.csv).
 #
 #	   CHANGES: - Suppressed package loading messages (upsetting users)
-#             - 
-#             - 
+#             - BOM loading fix
+#             - Point colours
 #
 #   REFERENCES: Batschelet E (1981).
 #               The Rayleigh test, Chap 4.2, p. 54
@@ -22,7 +22,6 @@ graphics.off()
 #               Academic Press (London)
 #
 #    EXAMPLES:  Fill out user input (lines 50-55), then press ctrl+shift+s to run
-#
 # 
 #TODO   ---------------------------------------------
 #TODO   
@@ -30,6 +29,8 @@ graphics.off()
 #- Perform test     +
 #- Test with simulated data +
 #- Save results +
+#- Handle Byte Order Markers +
+#- User selected point colour +
 
 # Useful functions --------------------------------------------------------
 # . Load package ----------------------------------------------------------
@@ -43,13 +44,13 @@ suppressMessages(#these are disturbing users unnecessarily
 
 
 
-
 # Input Variables ----------------------------------------------------------
 
 #  .  User input -----------------------------------------------------------
 csv_sep = ','#Is the csv comma separated or semicolon separated? For tab sep, use "\t"
 angle_name = "angles" #The title of the column with angles; NO SPACES PLEASE
 angle_unit = "degrees" # "degrees" or "radians"
+point_col = "black" # try "red", "blue", "green" or any of these: https://htmlcolorcodes.com/color-names/
 
 #Check the operating system and assign a logical flag (T or F)
 sys_win <- Sys.info()[['sysname']] == 'Windows'
@@ -98,11 +99,21 @@ if(is.null(path_file))
 {stop('No file selected.')}else
 {print(path_file)}
 
+#Check for Byte Order Marks, which can make a mess
+if(grepl(x = readLines(path_file,
+                       n = 1,
+                       warn = F),#check the first line of the file, where "angle" should be written
+         pattern = "ï|ÿ|þ")#common BOM renderings, are there any others?
+)
+{utf8BOM = T}else{utf8BOM = F}
 
 # Read in file ------------------------------------------------------------
 adata = read.table(file = path_file,#read from user-selected file
                    header = T,#read the file header to use for variable names
-                   sep = csv_sep#,#values are separated by the user-specified character
+                   sep = csv_sep,#values are separated by the user-specified character
+                   fileEncoding = ifelse(test = utf8BOM, #If the file contains Byte Order Markers
+                                         yes = "UTF-8-BOM",#read in using the appropriate format
+                                         no = "")#, #if not, R can guess
                    #other parameters can be added here for troubleshooting
 )
 
@@ -117,7 +128,8 @@ plot.circular(x = circular(x = adata$angle,
 ),
 stack = TRUE,
 bins = 360/5,
-sep = 0.05
+sep = 0.05,
+col = point_col
 )
 arrows.circular(x = mean.circular(circular(x = adata$angle, 
                                            type = 'angles',
