@@ -12,9 +12,7 @@ graphics.off()
 #               
 #      OUTPUTS: Results table (.csv).
 #
-#	   CHANGES: - Suppressed package loading messages (upset users)
-#             - Plot critical mean in expected direction
-#             - Handle BOM in input
+#	   CHANGES: - 
 #
 #   REFERENCES: Batschelet E (1981).
 #               The Rayleigh test, Chap 4.2, p. 54
@@ -27,10 +25,11 @@ graphics.off()
 # 
 #TODO   ---------------------------------------------
 #TODO   
-#- Read in data   
-#- Perform test     
-#- Test with simulated data 
-#- Save results 
+#- Read in data   +
+#- Perform test   + 
+#- Test with simulated data +
+#- Save results +
+#- Comment in detail
 
 # Useful functions --------------------------------------------------------
 # . Load package ----------------------------------------------------------
@@ -41,6 +40,9 @@ suppressMessages(#these are disturbing users unnecessarily
     require(CircStats)#package for circular hypothesis tests
   }
 )
+
+
+
 
 # Input Variables ----------------------------------------------------------
 
@@ -290,6 +292,13 @@ lr_stat = dev_expect_mean - dev_sample_mean # should be positive, sample mean al
 pLR = pchisq(q = lr_stat, # likelihood ratio chi-squared
        df = 1, # one parameter difference
        lower.tail = !(ll_sample_mean > ll_uniform)) # p(larger deviance): null hypothesis, expected mean is true mean
+print(data.frame(chi_squared = round(lr_stat, 3),
+        d.f. = 1,
+        p = round(pLR, 4),
+        h2 = if(pLR <0.05)
+          {'the sample mean differs significantly from the expected mean'}else
+          {'the sample mean _does not_ differ significantly from the expected mean'})
+      )
 
 # Save result -------------------------------------------------------------
 co_rayv_test = capture.output(rayv_test)
