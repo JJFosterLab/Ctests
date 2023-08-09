@@ -114,12 +114,16 @@ rho.circular(angles_sim*2)
 #                                 prop = 0.5
 #                       )
                     # )
-sim = data.frame(
-                 angle = round(c(angles_sim)*180/pi)
-                 )
-write.table(x = sim,
-            file = file.path(ltp,'Documents', "simulated_axial.csv"),
-            sep = csv_sep,
-            row.names = FALSE
-            )
+# sim = data.frame(
+#                  angle = round(c(angles_sim)*180/pi)
+#                  )
+# write.table(x = sim,
+#             file = file.path(ltp,'Documents', "simulated_axial.csv"),
+#             sep = csv_sep,
+#             row.names = FALSE
+#             )
+
+# WIP!!!! -----------------------------------------------------------------
+
+
 
