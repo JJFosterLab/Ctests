@@ -7,15 +7,12 @@ graphics.off()
 #  DESCRIPTION: Generates axial data and finds and plots the assumed
 #               means and mean vectors of a symmetrical axial distribution.
 #               
-#       INPUTS: A ".csv" table with a column of angles ("angle").
-#               User should specify test details (line 50).
+#       INPUTS: 
 #               
-#      OUTPUTS: Results table (.csv).
+#      OUTPUTS: 
 #
-#	   CHANGES: - Suppressed package loading messages (upset users)
-#             - Plot critical mean in expected direction
-#             - Handle BOM in input
-#
+#	   CHANGES: - 
+#	   
 #   REFERENCES: Batschelet E (1981).
 #               Multimodal Samples, Chap 1.6, p. 21
 #               Chapter 1: Measures of Location
@@ -53,7 +50,7 @@ errbar_dist = 0.15 # distance between errorbars and the outside of the circle (i
 
 #Check the operating system and assign a logical flag (T or F)
 sys_win = Sys.info()[['sysname']] == 'Windows'
-#On computers set up by JMU Würzburg, use user profile instead of home directory
+#On Windows computers, use user profile instead of home directory
 if(sys_win){
   #get rid of all the backslashes
   ltp = gsub('\\\\', '/', Sys.getenv('USERPROFILE'))#Why does windows have to make this so difficult
@@ -68,6 +65,7 @@ suppressMessages(#these are disturbing users unnecessarily
   {
     require(circular)#package for handling cirular data
     require(CircStats)#package for circular hypothesis tests
+    require(CircMLE)#package for fitting circular distributions
   }
 )
 
@@ -78,17 +76,60 @@ suppressMessages(#these are disturbing users unnecessarily
 
 #set n
 n_angles = 20
+#choose a random mean direction
 suppressWarnings( {mu1 = rcircularuniform(1) })
-kappa1 = A1inv(0.5)
+#choose a mean vector length
+mvl1 = 0.6
+# N.B. for this sample size p = 0.05 for a mean vector length of:
+sqrt(-log(0.05)/n_angles)
+# [1] 0.3870228
+
+kappa1 = A1inv(mvl1)
+
 angles_sim1 = suppressWarnings(
               rvonmises(n = n_angles,
                                 mu = mu1,
                                 kappa = kappa1
                       )
                     )
-plot(angles_sim1,
-     template = 'geographics')
-rho.circular(angles_sim1)
+
+par(mar = c(0,0,0,0)) # make space for plotting outside of the circle
+
+plot.circular(x = circular(x = deg(angles_sim1), 
+                           type = 'angles',
+                           unit = 'degrees',
+                           modulo = '2pi',
+                           zero = pi/2,
+                           rotation = 'clock'
+                          ),
+              stack = TRUE,
+              bins = 360/5,
+              sep = 0.05,
+              col = point_col,
+              xlim = c(-1,1)*1.2,# make space for plotting outside of the circle
+              ylim = c(-1,1)*1.2,# make space for plotting outside of the circle
+)
+arrows.circular(x = mean(circular(x = deg(angles_sim1),
+                             type = 'angles',
+                             unit = 'degrees',
+                             modulo = '2pi',
+                             zero = pi/2,
+                             rotation = 'clock'
+                            )
+                         ),
+                y = rho.circular(angles_sim1),
+                lwd = 2, 
+                col = lines_col,
+                length = 0.1,
+)
+lines.circular(x = seq(from = -pi, 
+                       to = pi, 
+                       length.out = 1e3),
+               y = rep(x = sqrt(-log(0.05)/n_angles),
+                       times = 1e3)-1,
+               lty = 3)
+
+rayleigh.test(angles_sim1)
 
 
 # . Generate complementary unimodal sample --------------------------------
@@ -98,30 +139,98 @@ angles_sim2 = suppressWarnings(
             kappa = kappa1
   )
 )
-rho.circular(angles_sim2)
+
+
+plot.circular(x = circular(x = deg(angles_sim2), 
+                           type = 'angles',
+                           unit = 'degrees',
+                           modulo = '2pi',
+                           zero = pi/2,
+                           rotation = 'clock'
+),
+stack = TRUE,
+bins = 360/5,
+sep = 0.05,
+col = point_col,
+xlim = c(-1,1)*1.2,# make space for plotting outside of the circle
+ylim = c(-1,1)*1.2,# make space for plotting outside of the circle
+)
+arrows.circular(x = mean(circular(x = deg(angles_sim2),
+                                  type = 'angles',
+                                  unit = 'degrees',
+                                  modulo = '2pi',
+                                  zero = pi/2,
+                                  rotation = 'clock'
+)
+),
+y = rho.circular(angles_sim2),
+lwd = 2, 
+col = lines_col,
+length = 0.1,
+)
+lines.circular(x = seq(from = -pi, 
+                       to = pi, 
+                       length.out = 1e3),
+               y = rep(x = sqrt(-log(0.05)/n_angles),
+                       times = 1e3)-1,
+               lty = 3)
+
+rayleigh.test(angles_sim2)
+
+
+# Combine the two samples -------------------------------------------------
+
+
 
 angles_sim = c(angles_sim1, angles_sim2)
 
-plot(angles_sim,
-     template = 'geographics')
-rho.circular(angles_sim*2)
-# angles_sim = suppressWarnings(
-#               rmixedvonmises(n = n_angles,
-#                                 mu1 = mu1,
-#                                 kappa1 = A1inv(0.9),
-#                                 mu2 = mu1 + pi,
-#                                 kappa2 = A1inv(0.9),
-#                                 prop = 0.5
-#                       )
-                    # )
-# sim = data.frame(
-#                  angle = round(c(angles_sim)*180/pi)
-#                  )
-# write.table(x = sim,
-#             file = file.path(ltp,'Documents', "simulated_axial.csv"),
-#             sep = csv_sep,
-#             row.names = FALSE
-#             )
+
+
+plot.circular(x = circular(x = deg(angles_sim), 
+                           type = 'angles',
+                           unit = 'degrees',
+                           modulo = '2pi',
+                           zero = pi/2,
+                           rotation = 'clock'
+),
+stack = TRUE,
+bins = 360/5,
+sep = 0.05,
+col = point_col,
+xlim = c(-1,1)*1.2,# make space for plotting outside of the circle
+ylim = c(-1,1)*1.2,# make space for plotting outside of the circle
+)
+arrows.circular(x = mean(circular(x = deg(angles_sim*2),
+                                  type = 'angles',
+                                  unit = 'degrees',
+                                  modulo = '2pi',
+                                  zero = pi/2,
+                                  rotation = 'clock'
+)
+) + c(0,pi),
+y = rep(x = rho.circular(angles_sim*2),
+        times = 2),
+lwd = 2, 
+col = lines_col,
+length = 0.1,
+)
+lines.circular(x = seq(from = -pi, 
+                       to = pi, 
+                       length.out = 1e3),
+               y = rep(x = sqrt(-log(0.05)/n_angles),
+                       times = 1e3)-1,
+               lty = 3)
+
+rayleigh.test(angles_sim*2)
+
+cmle = circ_mle(angles_sim)
+plot_circMLE(angles_sim, cmle)
+A1(cmle$results$k1[1])
+
+
+# What if the different means account for different proportions? ----------
+
+
 
 # WIP!!!! -----------------------------------------------------------------
 
