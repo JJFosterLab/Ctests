@@ -4,7 +4,7 @@ graphics.off()
 #       AUTHOR:	James Foster              DATE: 2023 06 09
 #     MODIFIED:	James Foster              DATE: 2023 06 09
 #
-#  DESCRIPTION: Loads a text file and performs a "inverse" V test for directedness 
+#  DESCRIPTION: Loads a text file and performs an "inverse" V test for directedness 
 #               towards an expected mean angle. Could be called an "A" test.
 #               
 #       INPUTS: A ".csv" table with a column of angles ("angle").
