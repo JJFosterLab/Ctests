@@ -4,8 +4,9 @@ graphics.off()
 #       AUTHOR:	James Foster              DATE: 2024 03 22
 #     MODIFIED:	James Foster              DATE: 2024 03 22
 #
-#  DESCRIPTION: Loads a text file and performs an "inverse" V test for directedness 
-#               towards an expected mean angle. Could be called an "A" test.
+#  DESCRIPTION: Loads a text file with paired data and performs an 
+#               "inverse" V test for directedness towards an expected mean angle. 
+#               Could be called a paired "A" test.
 #               
 #       INPUTS: A ".csv" table with a column of angles ("angle").
 #               User should specify test details (line 50).
@@ -29,6 +30,8 @@ graphics.off()
 #- Perform test   + 
 #- Test with simulated data +
 #- Save results +
+#- Appropriate comparison strategy
+#- Tie-breaking approach
 #- Comment in detail
 
 # Useful functions --------------------------------------------------------
@@ -50,7 +53,7 @@ suppressMessages(#these are disturbing users unnecessarily
 csv_sep = ','#Is the csv comma separated or semicolon separated? For tab sep, use "\t"
 angle_name = "angles" #The title of the column with angles; NO SPACES PLEASE
 angle_unit = "degrees" # "degrees" or "radians"
-expected_mean_angle = 0 # only check for northwards orientation
+expected_mean_angle = 'angle_1' # 2nd set should be same as 1st mean
 
 #Check the operating system and assign a logical flag (T or F)
 sys_win <- Sys.info()[['sysname']] == 'Windows'
@@ -63,21 +66,26 @@ if(sys_win){
 }
 
 # Simulate data (not used) ------------------------------------------------
-# n_angles = 10
-# angles_sim = suppressWarnings(
-#               rvonmises(n = n_angles,
-#                                 mu = rcircularuniform(1),
-#                                 kappa = A1inv(0.6)
-#                       )
-#                     )
-# sim = data.frame(
-#                  angle = round(c(angles_sim)*180/pi)
-#                  )
-# write.table(x = sim,
-#             file = file.path(ltp,'Documents', "simulated_angles.csv"),
-#             sep = csv_sep,
-#             row.names = FALSE
-#             )
+n_angles = 10
+angles_sim = suppressWarnings(
+              rvonmises(n = n_angles,
+                                mu = rcircularuniform(1),
+                                kappa = A1inv(0.6)
+                      )
+                    )
+sim = data.frame(
+                 angle_1 = round(c(angles_sim)*180/pi),
+                 angle_2 = round(c(angles_sim + 
+                                     rvonmises(n = n_angles,
+                                               mu = circular(pi/4),# true difference
+                                               kappa = A1inv(0.8)))* # N.B if pairs are non-independent, kappa for differences may be larger than population kappa
+                                   180/pi)
+                 )
+write.table(x = sim,
+            file = file.path(ltp,'Documents', "simulated_angles.csv"),
+            sep = csv_sep,
+            row.names = FALSE
+            )
 
 # . Select files ---------------------------------------------------------
 
@@ -118,7 +126,35 @@ adata = read.table(file = path_file,#read from user-selected file
 )
 
 View(adata)#show the user the data that was
-plot.circular(x = circular(x = adata$angle, 
+
+ref_angle = switch(expected_mean_angle,
+                   `angle_1` = mean.circular(x = circular(x = adata$angle_1, 
+                                                          type = 'angles',
+                                                          unit = 'degrees',
+                                                          template = 'geographics',
+                                                          modulo = '2pi',
+                                                          zero = pi/2,
+                                                          rotation = 'clock')
+                                             ),
+                   `angle_2` = mean.circular(x = circular(x = adata$angle_2, 
+                                                          type = 'angles',
+                                                          unit = 'degrees',
+                                                          template = 'geographics',
+                                                          modulo = '2pi',
+                                                          zero = pi/2,
+                                                          rotation = 'clock')
+                                             ),
+                   mean.circular(x = circular(x = adata$angle_1, 
+                                                          type = 'angles',
+                                                          unit = 'degrees',
+                                                          template = 'geographics',
+                                                          modulo = '2pi',
+                                                          zero = pi/2,
+                                                          rotation = 'clock')
+                                             )
+                   
+                   )
+plot.circular(x = circular(x = adata$angle_1, 
                            type = 'angles',
                            unit = 'degrees',
                            template = 'geographics',
@@ -130,7 +166,23 @@ stack = TRUE,
 bins = 360/5,
 sep = 0.05
 )
-arrows.circular(x = circular(x = expected_mean_angle, 
+par(new = T)
+plot.circular(x = circular(x = adata$angle_2, 
+                           type = 'angles',
+                           unit = 'degrees',
+                           template = 'geographics',
+                           modulo = '2pi',
+                           zero = pi/2,
+                           rotation = 'clock'
+),
+stack = TRUE,
+bins = 360/5,
+sep = -0.05,
+col = 'darkblue',
+shrink = 1.05,
+axes = F
+)
+arrows.circular(x = circular(x = ref_angle, 
                              type = 'angles',
                              unit = 'degrees',
                              #template = 'geographics',
@@ -143,24 +195,29 @@ lwd = 5,
 col = rgb(0,0,0,0.1),
 length = 0
 )
-arrows.circular(x = circular(x = expected_mean_angle, 
+arrows.circular(x = circular(x = ref_angle, 
                              type = 'angles',
                              unit = 'degrees',
                              template = 'geographics',
                              modulo = '2pi',
                              zero = pi/2,
                              rotation = 'clock'
-),
-y = mean(
-  cos((adata$angle - expected_mean_angle) * pi/180), 
-  na.rm = T)
-)
+                            ),
+                y = mean(x = 
+                  cos(x = 
+                    switch(EXPR = expected_mean_angle, 
+                          `angle_1` = adata$angle_2 - ref_angle,
+                           `angle_2` = adata$angle_1 - ref_angle, 
+                               adata$angle_2 - ref_angle)* pi/180) , 
+                  na.rm = T)
+                )
+
 suppressWarnings(
   {
-    lines.circular(x = seq(from = -expected_mean_angle*pi/180+pi/6 +pi/2,#or: bearing - pi/2
-                           to = -expected_mean_angle*pi/180-pi/6 +pi/2, #or: bearing + pi/2
+    lines.circular(x = seq(from = pi,#or: bearing - pi/2
+                           to = -pi, #or: bearing + pi/2
                            length.out = 1e3),
-                   y = -1+rep( x = 1.644854/(sqrt(2 * length(adata$angle))), times = 1e3),
+                   y = -1+rep( x = 1.644854/(sqrt(2 * length(adata$angle_2))), times = 1e3),
                    lty = 2
     )
   }
@@ -168,8 +225,12 @@ suppressWarnings(
 
 # Perform V test ----------------------------------------------------------
 #convert angles to circular class
-cangs = with(adata, circular(angle, unit = angle_unit) )
-emean = circular(expected_mean_angle, unit = angle_unit)
+cangs = with(adata, circular(x = switch(EXPR = expected_mean_angle, 
+                                    `angle_1` = angle_2,
+                                    `angle_2` = angle_1 , 
+                                    angle_2), 
+                             unit = angle_unit) )
+emean = circular(ref_angle, unit = angle_unit)
 
 rayv_test = rayleigh.test( x = cangs,
                            mu = emean
@@ -181,45 +242,140 @@ print(rayv_test)
 # The v-test has identified a non-uniform distribution with
 # a large component in the expected direction.
 
-#find the maximum likelihood von Mises distribution for this data
-ml_vm = mle.vonmises(x = cangs,
-                     bias = TRUE) # correct bias
+#find the maximum likelihood von Mises distribution for each trial
 
-#find the maximum likelihood von Mises distribution around the expected mean for this data
-ml_ex = mle.vonmises(x = cangs,
-                     mu = emean )
+#with more degrees of freedom log likelihood is lower than dividing data into pairs
+# ml_vm = with(adata, 
+#              apply(X =  cbind(circular(angle_1,units = angle_unit),
+#                               circular(angle_2,units = angle_unit)), 
+#                    MARGIN = 2, 
+#                    FUN = function(angs)
+#                      {
+#                      mle.vonmises(x = circular(angs,units = angle_unit),
+#                                   bias = TRUE)
+#                      }
+#                    ) # correct bias
+#               )
 
-# What is the likelihood of orientation towards the sample mean?
-ll_sample_mean = with(ml_vm, #using the maximum likelihood von Mises parameters
+#randomised within trial pairs
+if(length(adata$angle_1) %% 2)
+{
+  rnd_i = sample.int(length(adata$angle_1),
+                     size = length(adata$angle_1)+1, 
+                     replace = TRUE)
+  rnd_1 = rnd_i[1:(length(adata$angle_1)/2)]
+  rnd_2 = rnd_i[(length(adata$angle_1)/2+1):length(adata$angle_1)]
+  rdm_1 = with(adata, cbind(angle_1[rnd_1], angle_1[rnd_2]))
+  rdm_2 = with(adata, cbind(angle_2[rnd_1], angle_2[rnd_2]))
+}else
+{
+  rnd_i = sample.int(length(adata$angle_1),replace = FALSE)
+  rnd_1 = rnd_i[1:(length(adata$angle_1)/2)]
+  rnd_2 = rnd_i[(length(adata$angle_1)/2+1):length(adata$angle_1)]
+  rdm_1 = with(adata, cbind(angle_1[rnd_1], angle_1[rnd_2]))
+  rdm_2 = with(adata, cbind(angle_2[rnd_1], angle_2[rnd_2]))
+}
+ml_vm = apply(X =  rbind(circular(rdm_1,units = angle_unit),
+                              circular(rdm_2,units = angle_unit)), 
+                   MARGIN = 1, 
+                   FUN = function(angs)
+                   {
+                     mle.vonmises(x = if(identical(angs[1],angs[2]))
+                     {circular(x = as.numeric(angs),
+                               units = angle_unit)+ #tie break by separating angles 
+                         circular(x = c(-1,1)*0.5, # by 1 degree
+                                  units = angle_unit) #TODO better tie break,
+                     }else{circular(x = angs,
+                                    units = angle_unit)
+                     },
+                     bias = TRUE)
+                   }
+             ) # correct bias
+
+
+#find the maximum likelihood von Mises distribution around the mean of both heading
+# this is the expectation that each pair of observations are drawn from the same distrution
+# N.B. that is even if each pair comes from a different distriubtion
+ml_ex = with(adata, 
+             apply(X =  cbind(circular(angle_1,units = angle_unit),
+                              circular(angle_2,units = angle_unit)), 
+                   MARGIN = 1, 
+                   FUN = function(angs)
+                   {
+                     mle.vonmises(x = if(identical(angs[1],angs[2]))
+                       {circular(x = as.numeric(angs),
+                                 units = angle_unit)+ #tie break by separating angles 
+                                 circular(x = c(-1,1)*0.5, # by 1 degree
+                                          units = angle_unit) #TODO better tie break,
+                        }else{circular(x = angs,
+                                       units = angle_unit)
+                        },
+                        bias = TRUE)
+                   }
+             ) # correct bias
+)
+
+# What is the likelihood of orientation towards each trial's mean?
+ll_sample_mean = with(ml_vm[[1]], #using the maximum likelihood von Mises parameters
                       sum( # add together
-                        dvonmises(x = cangs, # probability density for each observed angle
+                        dvonmises(x = circular(adata$angle_1,
+                                               units = angle_unit), # probability density for each observed angle
                                   mu = mu, # ML estimated mean
                                   kappa = kappa, # ML estimated concentration
                                   log = TRUE) # on a log scale (i.e. add instead of multiplying)
                       )
-)
-
-# What is the likelihood of orientation towards the expected mean?
-ll_expect_mean = with(ml_ex, 
-                      sum(dvonmises(x = cangs, # probability density for each observed angle
-                                    mu = mu, #expected mean
-                                    kappa = kappa, # ML estimated concentration
-                                    log = TRUE) #return log probability
+                    ) + 
+  with(ml_vm[[2]], #using the maximum likelihood von Mises parameters
+                      sum( # add together
+                        dvonmises(x = circular(adata$angle_2,
+                                               units = angle_unit), # probability density for each observed angle
+                                  mu = mu, # ML estimated mean
+                                  kappa = kappa, # ML estimated concentration
+                                  log = TRUE) # on a log scale (i.e. add instead of multiplying)
                       )
-)
+) 
+
+# What is the likelihood of orientation towards each pair's expected mean?
+ll_expect_mean = sum(
+                  mapply(ml = ml_ex,
+                        a1 = adata$angle_1,
+                        a2 = adata$angle_2,
+                        FUN = function(ml, a1, a2)
+                            {
+                            sum(
+                              ifelse(test = a1 == a2,
+                                     yes = dvonmises(x = circular(x = c(a1+1, a2-1), #TODO better tie break
+                                                                  units = angle_unit),
+                                                     mu = ml$mu, #expected mean
+                                                     kappa = ml$kappa, # ML estimated concentration
+                                                     log = TRUE), #return log probability
+                                     no = dvonmises(x = circular(x = c(a1, a2),
+                                                     units = angle_unit),
+                                        mu = ml$mu, #expected mean
+                                        kappa = ml$kappa, # ML estimated concentration
+                                        log = TRUE) #return log probability
+                                    )
+                              )
+                            }
+                      )
+                    )
+  
 
 # Just to confirm the V-test, what is the likelihood of a uniform distribution?
-ll_uniform = sum(log(dcircularuniform(x = cangs)) #return log probability
+ll_uniform = with(adata,
+                  sum(log(dcircularuniform(x = circular(x = c(angle_1, angle_2),
+                                                   units = angle_unit))) #return log probability
+                  )
 )
 
 # Add the two distributions to the figure
-aa = circular(x = seq(from = -expected_mean_angle*pi/180+pi,#or: bearing - pi/2
-                      to = -expected_mean_angle*pi/180-pi, #or: bearing + pi/2
+aa = circular(x = seq(from = -ref_angle*pi/180+pi,#or: bearing - pi/2
+                      to = -ref_angle*pi/180-pi, #or: bearing + pi/2
                       length.out = 1e3))
 
 suppressWarnings(
   {
-    with(ml_vm,
+    with(ml_vm[[1]],
          lines.circular(x = aa +pi/2,
                         y = dvonmises(x = -aa,
                                       mu = mu,
@@ -228,15 +384,27 @@ suppressWarnings(
                         lty = 3,
                         col = 'cyan3')
     )
-    with(ml_ex,
-         lines.circular(x = aa+pi/2,
+    with(ml_vm[[2]],
+         lines.circular(x = aa +pi/2,
                         y = dvonmises(x = -aa,
                                       mu = mu,
                                       kappa = kappa,
                                       log = FALSE) - 1,
-                        lty = 1,
-                        col = 'pink')
+                        lty = 3,
+                        col = 'blue3')
     )
+    for(i in 1:length(ml_ex))
+    {
+      with(ml_ex[[i]],
+           lines.circular(x = aa+pi/2,
+                          y = dvonmises(x = -aa,
+                                        mu = mu,
+                                        kappa = kappa,
+                                        log = FALSE) - 1,
+                          lty = 1,
+                          col = adjustcolor('pink', alpha.f = 0.3) )
+      )
+    }
   }
 )
 legend(x = 'bottomright',
@@ -246,14 +414,17 @@ legend(x = 'bottomright',
        bty = 'n',
        legend = c('vector to expected mean',
                   'p(>V) < 0.05',
-                  'probability density: sample mean',
-                  'probability density: expected mean'),
+                  'probability density: sample mean 1',
+                  'probability density: sample mean 2',
+                  'probability density: pairs same mean'),
        col = c('black',
                'black',
                'cyan4',
+               'blue3',
                'pink'),
        lty = c(1,
                2,
+               3,
                3,
                1)
 )
@@ -282,7 +453,7 @@ dev_uniform = -ll_uniform*2 #deviance is -loglikelihood x 2
 if(ll_sample_mean > ll_uniform)
 {
   #calculate the likelihood ratio chi-squared statistic
-  lr_stat = dev_expect_mean - dev_sample_mean # should be positive, sample mean always more likely
+  lr_stat = dev_sample_mean - dev_expect_mean # should be positive, sample mean always more likely
 }else
 { # N.B. This is unnecessary, in this case all distributions have the same likelihood
   #if uniform is more likely, compare expected against uniform
@@ -293,11 +464,11 @@ pLR = pchisq(q = lr_stat, # likelihood ratio chi-squared
              df = 1, # one parameter difference
              lower.tail = !(ll_sample_mean > ll_uniform)) # p(larger deviance): null hypothesis, expected mean is true mean
 print(data.frame(chi_squared = round(lr_stat, 3),
-                 d.f. = 1,
+                 d.f. = length(adata$angle_1)*2 - 4,
                  p = round(pLR, 4),
                  h2 = if(pLR <0.05)
-                 {'the sample mean differs significantly from the expected mean'}else
-                 {'the sample mean _does not_ differ significantly from the expected mean'})
+                 {'the paired means differ significantly'}else
+                 {'the paired means _do not_ differ significantly'})
 )
 
 # Save result -------------------------------------------------------------
