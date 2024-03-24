@@ -68,13 +68,13 @@ if(sys_win){
 }
 
 # Simulate data (not used) ------------------------------------------------
-n_angles = 10
-mu_offset = circular(pi/6); circular(pi/6)
-kappa_both = A1inv(0.6)
+n_angles = 50
+mu_offset = circular(pi/5)
+kappa_both = A1inv(0.9)
 mu1_sim = suppressWarnings(
             rvonmises(n = n_angles,
                       mu = rcircularuniform(1),
-                      kappa = A1inv(0.5)#the wider the distribution of individual biases, the greater the influence of pairing
+                      kappa = A1inv(0.9)#the wider the distribution of individual biases, the greater the influence of pairing
                       )
             )
 sim = data.frame(
@@ -138,6 +138,9 @@ adata = read.table(file = path_file,#read from user-selected file
 )
 
 View(adata)#show the user the data that was
+dt_dim = dim(adata)
+if(dt_dim[2] != 2)
+{stop('pairs not found, please check data are in two columns')}
 
 ref_angle = switch(expected_mean_angle,
                    `angle_1` = mean.circular(x = circular(x = adata$angle_1, 
@@ -376,6 +379,43 @@ aa = circular(x = seq(from = -ref_angle*pi/180+pi,#or: bearing - pi/2
                       to = -ref_angle*pi/180-pi, #or: bearing + pi/2
                       length.out = 1e3))
 
+#product of probability density across all pairs
+pair_dens = sapply(X = ml_ex, 
+                   FUN = function(params)
+                     {
+                     with(params,
+                          {
+                     dvonmises(x = -aa,
+                               mu = mu,
+                               kappa = kappa,
+                               log = FALSE)
+                          }
+                     )
+                   }
+                   )
+# prod_pair_dens = apply(X = pair_dens, 
+#                        MARGIN = 1,
+#                        FUN = prod
+#                        )
+# sum_pair_dens = apply(X = pair_dens, 
+#                        MARGIN = 1,
+#                        FUN = sum
+#                        )
+max_pair_dens = apply(X = pair_dens, 
+                       MARGIN = 1,
+                       FUN = max
+                       )
+
+with(ml_vm[[1]],
+     lines.circular(x = aa +pi/2,
+                    y = dvonmises(x = -aa,
+                                  mu = mu,
+                                  kappa = kappa,
+                                  log = FALSE) - 1,
+                    lty = 3,
+                    col = 'cyan3')
+)
+
 suppressWarnings(
   {
     with(ml_up,
@@ -422,6 +462,15 @@ suppressWarnings(
                           col = adjustcolor('pink', alpha.f = 0.9) )
       )
     }
+    # lines.circular(x = aa +pi/2,
+    #                y = sum_pair_dens/
+    #                  dt_dim[1] -1, #rescale by length of data, these probability densities are large
+    #                lty = 3,
+    #                col = 'pink')
+    lines.circular(x = aa +pi/2,
+                   y = max_pair_dens -1, #give a rough impression of probability density corresponding to each point
+                   lty = 3,
+                   col = 'pink')
   }
 )
 legend(x = 'bottomright',
@@ -433,14 +482,17 @@ legend(x = 'bottomright',
                   'p(>V) < 0.05',
                   'probability density: sample mean 1',
                   'probability density: sample mean 2',
+                  'maximum probability density: pairs same mean',
                   'mean vector: pairs same mean'),
        col = c('black',
                'black',
                'cyan4',
                'blue3',
+               'pink',
                'pink'),
        lty = c(1,
                2,
+               3,
                3,
                3,
                1)
@@ -476,78 +528,90 @@ mod_details = data.frame(modnm = c('grand mean', 'trial mean', 'pair mean', 'uni
                          df = c(2, 4, length(adata$angle_1)*2, 0)
                          )
 #use all models for hypothesis testing
-
+lr_tests = c('uniformity', 'pairs_same_mean', 'trials_same_mean')
+#function to prepare the LR test
+LR_calc = function(tst, mdt)
+{
+  with(mdt,
+       {
+  switch(EXPR = tst,
 #test for uniformity (i.e. more comprehensive Rayleigh test)
-lr_test_nonunif = with(mod_details,
-                       data.frame(chi_squared = round(dev_uniform - deviance[rnk == 1], 3),
-                                  d.f. = df[rnk == 1],
-                                  p = round(
-                                    pchisq(q = dev_uniform - deviance[rnk == 1], # likelihood ratio chi-squared
-                                                   df = df[rnk == 1], # one parameter difference
-                                                   lower.tail = !(ll[rnk == 1] > ll_uniform)),  # p(larger deviance): null hypothesis, expected mean is true mean
-                                    4),
-                                  h1 = if(pchisq(q = dev_uniform - deviance[rnk == 1], # likelihood ratio chi-squared
-                                                       df = df[rnk == 1], # one parameter difference
-                                                       lower.tail = !(ll[rnk == 1] > ll_uniform)) <
-                                          0.05)
-                                  {'data are significantly oriented'}else
-                                  {'data _are not_ significantly oriented'})
-)
-#test for pairing #TODO fix for weak pairing
-lr_test_pairing = with(mod_details,
-                   data.frame(chi_squared = round(deviance[modnm == 'trial mean'] - 
-                                                    deviance[modnm == 'pair mean'], 3),
-                              d.f. = df[modnm == 'pair mean'] - 
-                                df[modnm == 'trial mean'], # 2x(n_pairs - n_trials) difference,
-                              p = round(
-                                pchisq(q = deviance[modnm == 'trial mean'] - 
-                                         deviance[modnm == 'pair mean'], # likelihood ratio chi-squared
-                                       df = df[modnm == 'pair mean'] - 
-                                         df[modnm == 'trial mean'], # one parameter difference
-                                               lower.tail = !(ll[modnm == 'pair mean'] > 
-                                                                ll[modnm == 'trial mean']) ),  # p(larger deviance): null hypothesis, expected mean is true mean
-                                4),
-                              h1 = if(pchisq(q = deviance[modnm == 'trial mean'] - 
-                                                  deviance[modnm == 'pair mean'], # likelihood ratio chi-squared
-                                             df = df[modnm == 'pair mean'] - 
-                                             df[modnm == 'trial mean'], # one parameter difference
-                                             lower.tail = !(ll[modnm == 'pair mean'] > 
-                                                            ll[modnm == 'trial mean']) ) <
-                                      0.05)
-                              {'pairs are significantly oriented in the same direction'}else
-                              {'pairs _are not_ oriented in the same direction'})
-)
+         uniformity = data.frame(
+                       dev0 = deviance[modnm == 'uniform'],
+                       dev1 = deviance[rnk == 1], #lowest rank is most likely model
+                       d.f. = df[rnk == 1] #uniform has 0 degrees of freedom, test degrees of freedom are best model - 0
+                                 ),
+#test for pairing (pairs have same mean)
+         pairs_same_mean = data.frame(
+                       dev0 = deviance[modnm == 'trial mean'], #null hypothesis pairs differ
+                       dev1 = deviance[modnm == 'pair mean'], #expect lower deviance with more params
+                       d.f. = df[modnm == 'pair mean'] -
+                               df[modnm == 'trial mean'] #trial comparison has only two means, fewer params
+                                 ),
 #test for unpaired grand mean
-lr_test_grand = with(mod_details,
-                   data.frame(chi_squared = round(deviance[modnm == 'trial mean'] - 
-                                                    deviance[modnm == 'grand mean'], 3),
-                              d.f. = df[modnm == 'trial mean'] - 
-                                df[modnm == 'grand mean'], # one parameter difference,
-                              p = round(
-                                pchisq(q = deviance[modnm == 'grand mean'] - 
-                                         deviance[modnm == 'trial mean'], # likelihood ratio chi-squared
-                                               df = df[modnm == 'trial mean'] - 
-                                         df[modnm == 'grand mean'], # one parameter difference
-                                               lower.tail = FALSE ),  # p(larger deviance): null hypothesis, expected mean is true mean
-                                4),
-                              h1 = if(pchisq(q = deviance[modnm == 'grand mean'] - 
-                                             deviance[modnm == 'trial mean'], # likelihood ratio chi-squared
-                                             df = df[modnm == 'trial mean'] - 
-                                             df[modnm == 'grand mean'], # one parameter difference
-                                             lower.tail = FALSE ) <
-                                      0.05)
-                              {'trial means differ significantly'}else
-                              {'trial means _do not_ differ significantly'})
-)
+         trials_same_mean = data.frame(
+                       dev0 = deviance[modnm == 'grand mean'], #null hypothesis pairs don't differ
+                       dev1 = deviance[modnm == 'trial mean'], #expect lower deviance with more params
+                       d.f. = df[modnm == 'trial mean'] -
+                               df[modnm == 'grand mean'] #grand mean has half the number of params
+                                 )
+         )
+       }
+  )
+}
+H1label = function(tst, d0, d1, pa)
+{
+  switch(EXPR = tst,
+         uniformity = if(d0 > d1 & pa <0.05)
+         {'data are significantly oriented'}else
+         {'data _are not_ significantly oriented'},
+         pairs_same_mean = if(d0 > d1 & pa <0.05)
+         {'pairs are significantly oriented in the same direction'}else
+         {'pairs _are not_ oriented in the same direction'},
+         trials_same_mean = if(d0 > d1 & pa <0.05)
+         {'trial means differ significantly'}else
+         {'trial means _do not_ differ significantly'}
+  )
+}
+all_results = data.frame(tests = lr_tests,
+                 t(
+                   sapply(X =lr_tests,
+                             FUN = LR_calc,
+                             mdt = mod_details)
+                       )
+                      )
+all_results = within(all_results,
+                     {
+                     chi_squared = abs(unlist(dev0) - unlist(dev1))
+                      }
+                     )
+all_results = within(all_results,
+                     {
+                     p = pchisq(q = unlist(chi_squared),
+                                df = unlist(d.f.),
+                                lower.tail = FALSE)
+                      }
+                     )
+all_results = within(all_results,
+                     {
+                     p_adjusted = p.adjust(p = p,
+                                           method = 'BH')
+                      }
+                     )
+all_results = within(all_results,
+                     {
+                     result = mapply(tst = tests,
+                                     d0 = unlist(dev0),
+                                     d1 = unlist(dev1),
+                                     pa = p_adjusted,
+                                     FUN = H1label
+                                     )
+                      }
+                     )
+                     
+print(all_results$result)
 
-all_tests = rbind(lr_test_nonunif, lr_test_pairing, lr_test_grand)
-all_tests = within(all_tests, 
-                   {
-                   p_adj = p.adjust(p = p, method = 'BH')
-                   }
-                  )
 
-print(all_tests)
                     
 # 
 # #compare expected mean with the 2nd most likely distribution
