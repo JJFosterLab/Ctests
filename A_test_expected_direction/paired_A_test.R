@@ -175,7 +175,7 @@ ref_angle = switch(expected_mean_angle,
 
 # Plot the data -----------------------------------------------------------
 
-
+par(mar =rep(0,4))
 plot.circular(x = circular(x = adata$angle_1, 
                            type = 'angles',
                            unit = 'degrees',
@@ -186,7 +186,7 @@ plot.circular(x = circular(x = adata$angle_1,
 ),
 stack = TRUE,
 bins = 360/5,
-sep = 0.05,
+sep = 0.5/dt_dim[1],
 col = 'cyan4'
 )
 par(new = T)
@@ -200,7 +200,7 @@ plot.circular(x = circular(x = adata$angle_2,
 ),
 stack = TRUE,
 bins = 360/5,
-sep = -0.05,
+sep = -0.5/dt_dim[1],
 col = 'darkblue',
 shrink = 1.05,
 axes = F
@@ -463,24 +463,27 @@ for(i in 1:length(ml_ex))
 }
 
 legend(x = 'bottomright',
-       inset = -c(0.01,0.03),
+       inset = c(0.01,0.02),
        cex = 0.4,
        bg = gray(level = 1,alpha = 0),
        bty = 'n',
        legend = c('vector to expected mean',
                   'p(>V) < 0.05',
+                  'prob. dens.: grand mean',
                   'prob. dens.: sample mean 1',
                   'prob. den.: sample mean 2',
                   'max. prob. dens.: pairs same mean',
                   'mean vector: pairs same mean'),
        col = c('black',
                'black',
+               'green4',
                'cyan4',
                'blue3',
                'pink',
                'pink'),
        lty = c(1,
                2,
+               3,
                3,
                3,
                3,
@@ -612,8 +615,17 @@ all_results = within(all_results,
                                      )
                       }
                      )
+#add calculated means
+Exmu = function(ml){round(ml$mu, 3)}
+all_results = within(all_results,
+                     {
+                     directions = c(paste0(round(ml_up$mu,3),'°'),
+                                    paste0(sapply(ml_ex,Exmu),'°, ', collapse = ''),
+                                    paste0(sapply(ml_vm,Exmu),'°, ', collapse = '')
+                                    )
+                      }
+                     )
 #print the results for the user                     
-print(all_results$result)
 with(all_results,
      {
             print(
@@ -624,6 +636,13 @@ with(all_results,
             )
       }
 )
+message(c('trial means\n', 
+      paste0(sapply(ml_vm,Exmu),'°, ', collapse = ''), 
+      '\nestimated difference\n', 
+      diff(sapply(ml_vm,Exmu))
+      )
+      )
+
 # Save result -------------------------------------------------------------
 #save result
 write.table(x = apply(X = all_results,
