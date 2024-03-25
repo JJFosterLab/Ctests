@@ -36,7 +36,7 @@ graphics.off()
 #needs installing before first use (in Rstudio, see automatic message)
 suppressMessages(#these are disturbing users unnecessarily
   {
-    require(circular)#package for handling cirular data
+    require(circular)#package for handling circular data
     require(CircStats)#package for circular hypothesis tests
   }
 )
