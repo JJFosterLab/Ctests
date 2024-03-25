@@ -33,6 +33,7 @@ graphics.off()
 #- Accurate simulation +
 #- Appropriate comparison strategy +
 #- Neaten up model comparison +
+#- Optimisation method for pairs (ML too biased?)
 #- Tie-breaking approach
 #- Comment in detail
 
@@ -41,7 +42,7 @@ graphics.off()
 #needs installing before first use (in Rstudio, see automatic message)
 suppressMessages(#these are disturbing users unnecessarily
   {
-    require(circular)#package for handling cirular data
+    require(circular)#package for handling circular data
     require(CircStats)#package for circular hypothesis tests
   }
 )
@@ -68,11 +69,11 @@ if(sys_win){
 }
 
   # # Simulate data (not used) ------------------------------------------------
-  # n_angles = 50
-  # mu_offset = circular(x = rad(40) )
+  # n_angles = 44
+  # mu_offset = circular(x = rad(65) )
   # # minimum discriminable angle appears to be approx 35°
-  # kappa_both = A1inv(0.9) #concentration around each trial mean
-  # kappa_indiv = A1inv(0.9) #concentration across individuals (pairs)
+  # kappa_both = A1inv(0.7) #concentration around each trial mean
+  # kappa_indiv = A1inv(0.98) #concentration across individuals (pairs)
   # #mean angle in trail 1 for each individual (pair)
   # mu1_sim = rvonmises(n = n_angles,
   #                       mu = rcircularuniform(1),#random angle
@@ -290,7 +291,7 @@ ml_vm = with(adata,
 
 #find the maximum likelihood von Mises distribution around the mean of both heading
 # this is the expectation that each pair of observations are drawn from the same distrution
-# N.B. that is even if each pair comes from a different distriubtion
+# N.B. that is even if each pair comes from a different distribution
 ml_ex = with(adata, 
              apply(X =  cbind(circular(angle_1,units = angle_unit),
                               circular(angle_2,units = angle_unit)), 
@@ -659,4 +660,162 @@ write.table(x = apply(X = all_results,
             row.names = FALSE,#rows do not need names
             sep = csv_sep #Use same separator as original csv file
 )
+
+
+  # # Random Effects model WIP ------------------------------------------------
+  # 
+  # REcirc = function(a1, 
+  #                   a2, 
+  #                   au = 'degrees',
+  #                   trc = 0
+  # )
+  # {
+  #   Get_mu = function(m){m$mu}
+  #   Get_kappa = function(m){m$kappa}
+  #   grand_mod = mle.vonmises(circular(x = c(a1, a2), units = au))  
+  #   trial_mod = apply(X =  cbind(circular(a1,units = au),
+  #                                circular(a2,units = au)),
+  #                     MARGIN = 2,
+  #                     FUN = function(angs)
+  #                     {
+  #                       mle.vonmises(x = circular(angs,units = au),
+  #                                    bias = TRUE)
+  #                     }
+  #   )
+  #   pair_mod = apply(X =  cbind(circular(a1,units = au),
+  #                               circular(a2,units = au)), 
+  #                    MARGIN = 1, 
+  #                    FUN = function(angs)
+  #                    {
+  #                      mle.vonmises(x = if(identical(angs[1],angs[2]))
+  #                      {circular(x = as.numeric(angs),
+  #                                units = au)+ #tie break by separating angles 
+  #                          circular(x = c(-1,1)*0.5, # by 1 degree
+  #                                   units = au) #TODO better tie break,
+  #                      }else{circular(x = angs,
+  #                                     units = au)
+  #                      },
+  #                      bias = TRUE)
+  #                    }
+  #   )
+  #   indiv_mod = mle.vonmises(x = circular(x = 
+  #                                           sapply(X = pair_mod, 
+  #                                                  FUN = Get_mu),
+  #                                         units = au)
+  #   )
+  #   grand_mu = Get_mu(grand_mod)
+  #   grand_logkappa = log(Get_kappa(grand_mod))
+  #   trial_mu = sapply(X = trial_mod, FUN = Get_mu) - grand_mu
+  #   trial_logkappa = log(sapply(X = trial_mod, FUN = Get_kappa)) - grand_logkappa
+  #   pair_mu = sapply(X = pair_mod, FUN = Get_mu) - grand_mu
+  #   pair_logkappa = log(sapply(X = pair_mod, FUN = Get_kappa)) - grand_logkappa
+  #   indiv_mu = Get_mu(indiv_mod)
+  #   indiv_logkappa = log(Get_kappa(indiv_mod))
+  #   
+  #   start_par = c(as.numeric(grand_mu) %% 360,#1 
+  #                 grand_logkappa,#2
+  #                 as.numeric(trial_mu) %% 360, #34
+  #                 trial_logkappa,#56 
+  #                 as.numeric(pair_mu) %% 360, #6+i
+  #                 pair_logkappa,#6+N+i 
+  #                 indiv_logkappa #6+2N + 1
+  #   )
+  #   start_par[is.infinite(start_par)] = -10
+  #   LLopt = function(a1, a2, au = au, prms)
+  #   {
+  #     mm = prms[c(1,
+  #                 3,
+  #                 4,
+  #                 6+1:length(a1))]
+  #     if(any(mm > 360-1e-16) |
+  #        any(mm < 0))
+  #     {
+  #       neg_ll = 1e9
+  #     }else
+  #     {
+  #       ll = sum(
+  #         sapply(X = 1:length(a1),
+  #                au = au,
+  #                prms = prms,
+  #                FUN =  function(i, prms, au)
+  #                {
+  #                  dvonmises(x = circular(a1[i], units = au), 
+  #                            mu = circular(prms[1] + # grand mean 
+  #                                            prms[3] + #trial 1 mean
+  #                                            prms[6+i], units = au), #pair i mean
+  #                            kappa = exp(prms[2] + # grand kappa 
+  #                                          prms[5] + #trial 1 kappa
+  #                                          prms[6+length(a1)+i]), #pair i kappa
+  #                            log = TRUE
+  #                  )
+  #                  + dvonmises(x = circular(a2[i], units = au), 
+  #                              mu = circular(prms[2] + # grand mean 
+  #                                              prms[4] + #trial 2 mean
+  #                                              prms[6+i], units = au), #pair i mean
+  #                              kappa = exp(prms[2] + # grand kappa 
+  #                                            prms[6] + #trial 1 kappa
+  #                                            prms[6+length(a1)+i]), #pair i kappa
+  #                              log = TRUE
+  #                  )
+  #                  
+  #                }
+  #         )
+  #       )+ 
+  #         sum(
+  #           dvonmises(x = circular(prms[6+1:length(a1)], 
+  #                                  units = au),
+  #                     mu = circular(0),
+  #                     kappa = exp(prms[6+2*length(a1)+1]),
+  #                     log = TRUE
+  #           )#indiv_kappa
+  #         )
+  #       neg_ll = -ll
+  #       # if(is.infinite(neg_ll)){neg_ll = 1e9}
+  #     }
+  #     return(neg_ll)
+  #   }
+  #   # LLopt(a1, a2, au = au, prms = start_par)
+  #   opt = optim(par = start_par,
+  #               fn = LLopt,
+  #               a1 = a1,
+  #               a2 = a2,
+  #               au = au,
+  #               control = list(trace = trc)
+  #   )
+  #   return(opt)
+  # }
+  # 
+  # opt_remod = REcirc(a1 = adata$angle_1, a2 = adata$angle_2)
+  # ll_remod = with(adata,
+  #                 {
+  #                   sum(
+  #                     sapply(X = 1:length(angle_1),
+  #                            au = angle_unit,
+  #                            prms = opt_remod$par,
+  #                            FUN =  function(i, prms, au)
+  #                            {
+  #                              dvonmises(x = circular(angle_1[i], units = au), 
+  #                                        mu = circular(prms[1] + # grand mean 
+  #                                                        prms[3] + #trial 1 mean
+  #                                                        prms[6+i], units = au), #pair i mean
+  #                                        kappa = exp(prms[2] + # grand kappa 
+  #                                                      prms[5] + #trial 1 kappa
+  #                                                      prms[6+length(angle_1)+i]), #pair i kappa
+  #                                        log = TRUE
+  #                              )
+  #                              + dvonmises(x = circular(angle_2[i], units = au), 
+  #                                          mu = circular(prms[2] + # grand mean 
+  #                                                          prms[4] + #trial 2 mean
+  #                                                          prms[6+i], units = au), #pair i mean
+  #                                          kappa = exp(prms[2] + # grand kappa 
+  #                                                        prms[6] + #trial 1 kappa
+  #                                                        prms[6+length(angle_1)+i]), #pair i kappa
+  #                                          log = TRUE
+  #                              )
+  #                              
+  #                            }
+  #                     )
+  #                   )
+  #                 }
+  # )
 
