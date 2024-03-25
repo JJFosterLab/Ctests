@@ -13,7 +13,7 @@ graphics.off()
 #               
 #      OUTPUTS: Results table (.csv).
 #
-#	   CHANGES: - 
+#	   CHANGES: - Combined 3 model selection procedure
 #
 #   REFERENCES: Batschelet E (1981).
 #               The Rayleigh test, Chap 4.2, p. 54
@@ -32,7 +32,7 @@ graphics.off()
 #- Save results +
 #- Accurate simulation +
 #- Appropriate comparison strategy +
-#- Neaten up model comparison 
+#- Neaten up model comparison +
 #- Tie-breaking approach
 #- Comment in detail
 
@@ -67,37 +67,40 @@ if(sys_win){
   ltp <- Sys.getenv('HOME')#Life was easier on Mac
 }
 
-# Simulate data (not used) ------------------------------------------------
-n_angles = 50
-mu_offset = circular(pi/5)
-kappa_both = A1inv(0.9)
-mu1_sim = suppressWarnings(
-            rvonmises(n = n_angles,
-                      mu = rcircularuniform(1),
-                      kappa = A1inv(0.9)#the wider the distribution of individual biases, the greater the influence of pairing
-                      )
-            )
-sim = data.frame(
-                 angle_1 = round(c(suppressWarnings(
-                   sapply(X = mu1_sim,
-                          FUN = rvonmises,
-                          n = 1,
-                           kappa = kappa_both
-                   )
-                 ))*180/pi),
-                 angle_2 = round(c(suppressWarnings(
-                             sapply(X =mu1_sim + mu_offset,# true difference,
-                                    FUN = rvonmises,
-                                    n = 1,
-                                    kappa = kappa_both
-                             )
-                 ))*180/pi)
-                 )
-write.table(x = sim,
-            file = file.path(ltp,'Documents', "simulated_angles.csv"),
-            sep = csv_sep,
-            row.names = FALSE
-            )
+  # # Simulate data (not used) ------------------------------------------------
+  # n_angles = 50
+  # mu_offset = circular(x = rad(40) )
+  # # minimum discriminable angle appears to be approx 35°
+  # kappa_both = A1inv(0.9) #concentration around each trial mean
+  # kappa_indiv = A1inv(0.9) #concentration across individuals (pairs)
+  # #mean angle in trail 1 for each individual (pair)
+  # mu1_sim = rvonmises(n = n_angles,
+  #                       mu = rcircularuniform(1),#random angle
+  #                       kappa = kappa_indiv#the wider the distribution of individual biases, the greater the influence of pairing
+  #                       )
+  # #simulate the full dataset
+  # sim = data.frame(
+  #                  angle_1 = round(c(suppressWarnings( #rvonmises converts to circular and warns
+  #                    sapply(X = mu1_sim,
+  #                           FUN = rvonmises,
+  #                           n = 1,
+  #                            kappa = kappa_both
+  #                    )
+  #                  ))*180/pi),#convert to angles and round to nearest degree
+  #                  angle_2 = round(c(suppressWarnings( #rvonmises converts to circular and warns
+  #                              sapply(X =mu1_sim + mu_offset,# true difference,
+  #                                     FUN = rvonmises,
+  #                                     n = 1,
+  #                                     kappa = kappa_both
+  #                              )
+  #                  ))*180/pi) #convert to angles and round to nearest degree
+  #                  )
+  # #save somewhere the user likely keeps data
+  # write.table(x = sim,
+  #             file = file.path(ltp,'Documents', "simulated_angles.csv"),
+  #             sep = csv_sep,
+  #             row.names = FALSE
+  #             )
 
 # . Select files ---------------------------------------------------------
 
@@ -183,7 +186,8 @@ plot.circular(x = circular(x = adata$angle_1,
 ),
 stack = TRUE,
 bins = 360/5,
-sep = 0.05
+sep = 0.05,
+col = 'cyan4'
 )
 par(new = T)
 plot.circular(x = circular(x = adata$angle_2, 
@@ -231,15 +235,13 @@ arrows.circular(x = circular(x = ref_angle,
                   na.rm = T)
                 )
 
-suppressWarnings(
-  {
-    lines.circular(x = seq(from = pi,#or: bearing - pi/2
-                           to = -pi, #or: bearing + pi/2
-                           length.out = 1e3),
-                   y = -1+rep( x = 1.644854/(sqrt(2 * length(adata$angle_2))), times = 1e3),
-                   lty = 2
-    )
-  }
+lines.circular(x = circular(x = 
+                    seq(from = pi,#or: bearing - pi/2
+                       to = -pi, #or: bearing + pi/2
+                       length.out = 1e3)
+                    ),
+               y = -1+rep( x = 1.644854/(sqrt(2 * length(adata$angle_2))), times = 1e3),
+               lty = 2
 )
 
 # Perform V test ----------------------------------------------------------
@@ -375,17 +377,21 @@ ll_uniform = with(adata,
 
 
 # Add the two distributions to the figure
-aa = circular(x = seq(from = -ref_angle*pi/180+pi,#or: bearing - pi/2
-                      to = -ref_angle*pi/180-pi, #or: bearing + pi/2
-                      length.out = 1e3))
+# aa = circular(x = seq(from = -ref_angle*pi/180+pi,#or: bearing - pi/2
+#                       to = -ref_angle*pi/180-pi, #or: bearing + pi/2
+#                       length.out = 1e3))
+aa = circular(x = seq(from = -180,#or: bearing - pi/2
+                      to = 180, #or: bearing + pi/2
+                      length.out = 1e3),
+              unit = angle_unit)
 
-#product of probability density across all pairs
+#probability density across all pairs
 pair_dens = sapply(X = ml_ex, 
                    FUN = function(params)
                      {
                      with(params,
                           {
-                     dvonmises(x = -aa,
+                     dvonmises(x = aa,
                                mu = mu,
                                kappa = kappa,
                                log = FALSE)
@@ -393,96 +399,79 @@ pair_dens = sapply(X = ml_ex,
                      )
                    }
                    )
-# prod_pair_dens = apply(X = pair_dens, 
-#                        MARGIN = 1,
-#                        FUN = prod
-#                        )
-# sum_pair_dens = apply(X = pair_dens, 
-#                        MARGIN = 1,
-#                        FUN = sum
-#                        )
+#take maximum (representative for pointwise estimates of each pair)
 max_pair_dens = apply(X = pair_dens, 
                        MARGIN = 1,
                        FUN = max
                        )
-
-with(ml_vm[[1]],
-     lines.circular(x = aa +pi/2,
-                    y = dvonmises(x = -aa,
+#probability density grand mean
+with(ml_up,
+     lines.circular(x = 90-aa,
+                    y = dvonmises(x = aa,
                                   mu = mu,
                                   kappa = kappa,
                                   log = FALSE) - 1,
                     lty = 3,
+                    lwd = 2,
+                    col = 'green4')
+)
+#probability density trial 1
+with(ml_vm[[1]],
+     lines.circular(x = 90-aa,
+                    y = dvonmises(x = aa,
+                                  mu = mu,
+                                  kappa = kappa,
+                                  log = FALSE) - 1,
+                    lty = 3,
+                    lwd = 2,
                     col = 'cyan3')
 )
-
-suppressWarnings(
-  {
-    with(ml_up,
-         lines.circular(x = aa +pi/2,
-                        y = dvonmises(x = -aa,
-                                      mu = mu,
-                                      kappa = kappa,
-                                      log = FALSE) - 1,
-                        lty = 3,
-                        col = 'green4')
-    )
-    with(ml_vm[[1]],
-         lines.circular(x = aa +pi/2,
-                        y = dvonmises(x = -aa,
-                                      mu = mu,
-                                      kappa = kappa,
-                                      log = FALSE) - 1,
-                        lty = 3,
-                        col = 'cyan3')
-    )
-    with(ml_vm[[2]],
-         lines.circular(x = aa +pi/2,
-                        y = dvonmises(x = -aa,
-                                      mu = mu,
-                                      kappa = kappa,
-                                      log = FALSE) - 1,
-                        lty = 3,
-                        col = 'blue3')
-    )
-    for(i in 1:length(ml_ex))
-    {
-      with(ml_ex[[i]],
-           arrows.circular(
-                           x = circular(mu,
-                                        type = 'angles',
-                                        unit = 'degrees',
-                                        template = 'geographics',
-                                        modulo = '2pi',
-                                        zero = pi/2,
-                                        rotation = 'clock'),
-                          y = A1(kappa),
-                          length = 0,
-                          lty = 1,
-                          col = adjustcolor('pink', alpha.f = 0.9) )
-      )
-    }
-    # lines.circular(x = aa +pi/2,
-    #                y = sum_pair_dens/
-    #                  dt_dim[1] -1, #rescale by length of data, these probability densities are large
-    #                lty = 3,
-    #                col = 'pink')
-    lines.circular(x = aa +pi/2,
-                   y = max_pair_dens -1, #give a rough impression of probability density corresponding to each point
-                   lty = 3,
-                   col = 'pink')
-  }
+#probability density trial 2
+with(ml_vm[[2]],
+     lines.circular(x = 90-aa,
+                    y = dvonmises(x = aa,
+                                  mu = mu,
+                                  kappa = kappa,
+                                  log = FALSE) - 1,
+                    lty = 3,
+                    lwd = 2,
+                    col = 'blue3')
 )
+#maximum probability density for each pair
+lines.circular(x = 90-aa,
+               y = max_pair_dens -1, #give a rough impression of probability density corresponding to each point
+               lty = 3,
+               lwd = 2,
+               col = 'pink')
+#mean vector for each pair
+for(i in 1:length(ml_ex))
+{
+  with(ml_ex[[i]],
+       arrows.circular(
+                       x = circular(mu,
+                                    type = 'angles',
+                                    unit = 'degrees',
+                                    template = 'geographics',
+                                    modulo = '2pi',
+                                    zero = pi/2,
+                                    rotation = 'clock'),
+                      y = A1(kappa),
+                      length = 0,
+                      lty = 1,
+                      col = adjustcolor('pink', alpha.f = 0.9) )
+  )
+}
+
 legend(x = 'bottomright',
-       inset = -0.01,
-       cex = 0.5,
+       inset = -c(0.01,0.03),
+       cex = 0.4,
        bg = gray(level = 1,alpha = 0),
        bty = 'n',
        legend = c('vector to expected mean',
                   'p(>V) < 0.05',
-                  'probability density: sample mean 1',
-                  'probability density: sample mean 2',
-                  'maximum probability density: pairs same mean',
+                  'prob. dens.: sample mean 1',
+                  'prob. den.: sample mean 2',
+                  'max. prob. dens.: pairs same mean',
                   'mean vector: pairs same mean'),
        col = c('black',
                'black',
@@ -518,61 +507,92 @@ dev_grand_mean = -ll_grand_mean*2 #deviance is -loglikelihood x 2
 dev_sample_mean = -ll_sample_mean*2 #deviance is -loglikelihood x 2
 dev_expect_mean = -ll_expect_mean*2 #deviance is -loglikelihood x 2
 dev_uniform = -ll_uniform*2 #deviance is -loglikelihood x 2
-#rank deviances (not used)
-dev_rnk = rank(c(dev_grand_mean, dev_sample_mean, dev_expect_mean, dev_uniform))
-names(dev_rnk) = c('grand mean', 'trial mean', 'pair mean', 'uniform')
-mod_details = data.frame(modnm = c('grand mean', 'trial mean', 'pair mean', 'uniform'),
-                         ll = c(ll_grand_mean, ll_sample_mean, ll_expect_mean, ll_uniform),
-                         deviance = c(dev_grand_mean, dev_sample_mean, dev_expect_mean, dev_uniform),
-                         rnk = rank(c(dev_grand_mean, dev_sample_mean, dev_expect_mean, dev_uniform)),
-                         df = c(2, 4, length(adata$angle_1)*2, 0)
+#compile model details
+mod_details = data.frame(
+                modnm = c('grand mean', 'trial mean', 'pair mean', 'uniform'),
+                ll = c(ll_grand_mean, ll_sample_mean, ll_expect_mean, ll_uniform),
+                deviance = c(dev_grand_mean, dev_sample_mean, dev_expect_mean, dev_uniform),
+                rnk = rank(c(dev_grand_mean, dev_sample_mean, dev_expect_mean, dev_uniform)),
+                df = c(2, 4, length(adata$angle_1)*2, 0)
                          )
-#use all models for hypothesis testing
-lr_tests = c('uniformity', 'pairs_same_mean', 'trials_same_mean')
-#function to prepare the LR test
+#set up tests for three hypotheses
+lr_tests = c('uniformity', # data are uniformly or non-uniformly distributed
+             'pairs_same_mean', # pairs share the same mean (independently of trials)
+             'trials_same_mean') # trials share the same mean
+#function to prepare and perform the LR test
 LR_calc = function(tst, mdt)
 {
+  #collect the deviances for h0 and h1 and calculate the difference in degrees of freedom
+  lr_res = 
   with(mdt,
        {
   switch(EXPR = tst,
 #test for uniformity (i.e. more comprehensive Rayleigh test)
          uniformity = data.frame(
-                       dev0 = deviance[modnm == 'uniform'],
-                       dev1 = deviance[rnk == 1], #lowest rank is most likely model
+                       dev0 = deviance[modnm == 'uniform'],#null hypothesis: uniform distribution
+                       dev1 = deviance[rnk == 1], #lowest rank is most likely model, any non-uniform distribution
                        d.f. = df[rnk == 1] #uniform has 0 degrees of freedom, test degrees of freedom are best model - 0
                                  ),
 #test for pairing (pairs have same mean)
          pairs_same_mean = data.frame(
-                       dev0 = deviance[modnm == 'trial mean'], #null hypothesis pairs differ
-                       dev1 = deviance[modnm == 'pair mean'], #expect lower deviance with more params
+                       dev0 = deviance[modnm == 'trial mean'], #null hypothesis: pairs differ across trials
+                       dev1 = deviance[modnm == 'pair mean'], #pairs share a mean, expect lower deviance with more params
                        d.f. = df[modnm == 'pair mean'] -
                                df[modnm == 'trial mean'] #trial comparison has only two means, fewer params
                                  ),
 #test for unpaired grand mean
          trials_same_mean = data.frame(
-                       dev0 = deviance[modnm == 'grand mean'], #null hypothesis pairs don't differ
-                       dev1 = deviance[modnm == 'trial mean'], #expect lower deviance with more params
+                       dev0 = deviance[modnm == 'grand mean'], #null hypothesis: trials don't differ
+                       dev1 = deviance[modnm == 'trial mean'], #within trial obs. share a mean, expect lower deviance with more params
                        d.f. = df[modnm == 'trial mean'] -
                                df[modnm == 'grand mean'] #grand mean has half the number of params
                                  )
          )
        }
   )
+  #calculate the change in deviance (chi-squared distributed)
+  lr_res = within(lr_res,
+         {
+           chi_squared = abs(unlist(dev0) - unlist(dev1))
+         }
+         )
+  #calculate the p value
+  lr_res = within(lr_res,
+         {
+           p = pchisq(q = unlist(chi_squared),
+                      df = unlist(d.f.),
+                      lower.tail = FALSE)
+         }
+        )
+  #adjust for multiple comparisons (3 in this case)
+   lr_res = within(lr_res,
+                        {
+                          p_adjusted = p.adjust(p = p,
+                                                method = 'BH',
+                                                n = 3)#could this be flexible?
+                        }
+                   )
+   return(lr_res)
+         
 }
+
+#Interpret the hypothesis tests depending on size and sign of difference in deviance
 H1label = function(tst, d0, d1, pa)
 {
   switch(EXPR = tst,
-         uniformity = if(d0 > d1 & pa <0.05)
+         uniformity = if(d0 > d1 & pa <0.05) # data may be oriented, not significantly oriented, or significantly disoriented
          {'data are significantly oriented'}else
          {'data _are not_ significantly oriented'},
-         pairs_same_mean = if(d0 > d1 & pa <0.05)
+         pairs_same_mean = if(d0 > d1 & pa <0.05) # pairs may share a mean, share no significant mean, or significantly differ in mean
          {'pairs are significantly oriented in the same direction'}else
          {'pairs _are not_ oriented in the same direction'},
-         trials_same_mean = if(d0 > d1 & pa <0.05)
+         trials_same_mean = if(d0 > d1 & pa <0.05) # trials significantly differ in mean, not significantly differ in mean, or share a significant mean
          {'trial means differ significantly'}else
          {'trial means _do not_ differ significantly'}
   )
 }
+
+#Perform collect likelihood ratio tests for each hypothesis
 all_results = data.frame(tests = lr_tests,
                  t(
                    sapply(X =lr_tests,
@@ -580,24 +600,8 @@ all_results = data.frame(tests = lr_tests,
                              mdt = mod_details)
                        )
                       )
-all_results = within(all_results,
-                     {
-                     chi_squared = abs(unlist(dev0) - unlist(dev1))
-                      }
-                     )
-all_results = within(all_results,
-                     {
-                     p = pchisq(q = unlist(chi_squared),
-                                df = unlist(d.f.),
-                                lower.tail = FALSE)
-                      }
-                     )
-all_results = within(all_results,
-                     {
-                     p_adjusted = p.adjust(p = p,
-                                           method = 'BH')
-                      }
-                     )
+
+#add labels to interpret each test according to p value and sign of comparison
 all_results = within(all_results,
                      {
                      result = mapply(tst = tests,
@@ -608,72 +612,32 @@ all_results = within(all_results,
                                      )
                       }
                      )
-                     
+#print the results for the user                     
 print(all_results$result)
-
-
-                    
-# 
-# #compare expected mean with the 2nd most likely distribution
-# if(ll_sample_mean > ll_uniform)
-# {
-#   #calculate the likelihood ratio chi-squared statistic
-#   if(ll_grand_mean > ll_sample_mean)
-#   {
-#     lrComp = 'grand vs expected'
-#     lr_stat = dev_grand_mean - dev_expect_mean
-#   }else
-#   {
-#   lr_stat = dev_sample_mean - dev_expect_mean # should be positive, paired means always more likely
-#   }
-# }else
-# { # N.B. This is unnecessary, in this case all distributions have the same likelihood
-#   #if uniform is more likely, compare expected against uniform
-#   lr_stat = dev_uniform -  dev_expect_mean# should be positive
-# }
-# #calculate degrees of freedom for the test
-# dfLR = length(adata$angle_1)*2 - 4 #2 parameters per distribution, 2 distributions for unpaired, n_pairs distributions for paired
-# #Does the estimated mean significantly reduce deviance?
-# pLR = pchisq(q = lr_stat, # likelihood ratio chi-squared
-#              df = dfLR, # one parameter difference
-#              lower.tail = !(ll_sample_mean > ll_uniform)) # p(larger deviance): null hypothesis, expected mean is true mean
-# print(data.frame(chi_squared = round(lr_stat, 3),
-#                  d.f. = dfLR,
-#                  p = round(pLR, 4),
-#                  h2 = if(pLR <0.05)
-#                  {'paired means are are significant'}else
-#                  {'the means _do not_ do not pair significantly'})
-# )
-# 
-# # Save result -------------------------------------------------------------
-# co_rayv_test = capture.output(rayv_test)
-# #save result
-# write.table(x = with(rayv_test,#save relevant info in a table
-#                      cbind(data = path_file,
-#                            test = paste('(V test)' , co_rayv_test[2]),
-#                            h0 = 'the distribution of angles is uniform',
-#                            h1 = 'angle pairs are from a unimodal von Mises distribution centred on the expected mean angle',
-#                            h2 = 'angle pairs are from two different unimodal von Mises distributions',
-#                            R_statistic = statistic,
-#                            expected_mean = mu,
-#                            p_h0 = p.value,
-#                            LogLik_h1 = ll_expect_mean,
-#                            LogLik_h2 = ll_sample_mean,
-#                            chi_sq = lr_stat,
-#                            df = 1,
-#                            p_h2 = pLR
-#                      )
-# ),
-# file = file.path(dirname(path_file),#same place as original with
-#                  paste(sub(pattern='.csv',#similar name
-#                            replacement = '',
-#                            x = basename(path_file)
-#                  ),
-#                  'Paired A test result.csv'#ending in mean test
-#                  )
-# ),
-# row.names = FALSE,#rows do not need names
-# sep = csv_sep #Use same separator as original csv file
-# 
-# )
+with(all_results,
+     {
+            print(
+              data.frame(chi_squared = round(unlist(chi_squared), 3),
+                        d.f = unlist(d.f.),
+                         p = round(unlist(p_adjusted), 4),
+                         result = result)
+            )
+      }
+)
+# Save result -------------------------------------------------------------
+#save result
+write.table(x = apply(X = all_results,
+                      MARGIN = 1:2,
+                      FUN = unlist),
+            file = file.path(dirname(path_file),#same place as original with
+                             paste(sub(pattern='.csv',#similar name
+                                       replacement = '',
+                                       x = basename(path_file)
+                             ),
+                             'Paired A test result.csv'#ending in mean test
+                             )
+            ),
+            row.names = FALSE,#rows do not need names
+            sep = csv_sep #Use same separator as original csv file
+)
 
