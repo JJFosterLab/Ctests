@@ -90,6 +90,9 @@ if(sys_win){
   # mu_offset = circular(x = rad(-30) )
   # # minimum discriminable angle appears to be approx 35°
   # kappa_both = A1inv(0.7) #concentration around each trial mean
+  # logkappa_var = 1.0 #scale of random variation in concentration (log units)
+  # if(paired_data)
+  # {
   # kappa_indiv = A1inv(0.98) #concentration across individuals (pairs)
   # #mean angle in trail 1 for each individual (pair)
   # mu1_sim = rvonmises(n = n_angles,
@@ -102,17 +105,39 @@ if(sys_win){
   #                    sapply(X = mu1_sim,
   #                           FUN = rvonmises,
   #                           n = 1,
-  #                            kappa = kappa_both
+  #                            kappa = exp(log(kappa_both) + rnorm(n = 1, sd = logkappa_var))
   #                    )
   #                  ))*180/pi),#convert to angles and round to nearest degree
   #                  angle_2 = round(c(suppressWarnings( #rvonmises converts to circular and warns
   #                              sapply(X =mu1_sim + mu_offset,# true difference,
   #                                     FUN = rvonmises,
   #                                     n = 1,
-  #                                     kappa = kappa_both
+  #                                     kappa = exp(log(kappa_both) + rnorm(n = 1, sd = logkappa_var))
   #                              )
   #                  ))*180/pi) #convert to angles and round to nearest degree
   #                  )
+  # }else
+  # {
+  # n_angles2 = ceiling(0.75*n_angles)
+  # mu1_sim = rcircularuniform(n = 1,control.circular = list(units = angle_unit))
+  # sim = data.frame(
+  #                  angle_1 = round(c(suppressWarnings( #rvonmises converts to circular and warns
+  #                    rvonmises(n = n_angles,
+  #                              mu = circular(x = mu1_sim, units = angle_unit),
+  #                            kappa = exp(log(kappa_both) + rnorm(n = 1, sd = logkappa_var))
+  #                    )
+  #                  ))),#convert to angles and round to nearest degree
+  #                  angle_2 = round(c(suppressWarnings( #rvonmises converts to circular and warns
+  #                    rvonmises(n = n_angles2,
+  #                              mu = circular(x = mu1_sim+deg(mu_offset), units = angle_unit),
+  #                              kappa = exp(log(kappa_both) + rnorm(n = 1, sd = logkappa_var))
+  #                    )
+  #                  ),
+  #                  circular(x = rep(x = NA, times = n_angles - n_angles2), 
+  #                          units = angle_unit) #convert to angles and round to nearest degree
+  #                  ) )
+  #                 )
+  # }
   # #save somewhere the user likely keeps data
   # write.table(x = sim,
   #             file = file.path(ltp,'Documents', "simulated_angles.csv"),
@@ -171,7 +196,8 @@ ref_angle = with(adata,
                                                           template = 'geographics',
                                                           modulo = '2pi',
                                                           zero = pi/2,
-                                                          rotation = 'clock')
+                                                          rotation = 'clock'),
+                                 na.rm = TRUE
                                )
                  } 
                  )
@@ -229,11 +255,7 @@ arrows.circular(x = circular(x = ref_angle,
                              rotation = 'clock'
                             ),
                 y = mean(x = 
-                  cos(x = 
-                    switch(EXPR = expected_mean_angle, 
-                          `angle_1` = adata$angle_2 - ref_angle,
-                           `angle_2` = adata$angle_1 - ref_angle, 
-                               adata$angle_2 - ref_angle)* pi/180) , 
+                  cos(x = with(adata, c(angle_1, angle_2) - ref_angle)* pi/180), 
                   na.rm = T)
                 )
 
@@ -294,6 +316,20 @@ if(!paired_data)
                      }
                    ) # correct bias
               )
+  #find the maximum likelihood von Mises distribution for each column
+  ml_sample_kappa = with(adata,
+             apply(X =  cbind(circular(angle_1,units = angle_unit),
+                              circular(angle_2,units = angle_unit)),
+                   MARGIN = 2,
+                   FUN = function(angs)
+                     {
+                     mle.vonmises(x = circular(angs,units = angle_unit),
+                                  mu = circular(ml_grand_mean$mu,
+                                                units = angle_unit),
+                                  bias = TRUE)
+                     }
+                   ) # correct bias
+              )
 }else
 {
 # . . Paired data ---------------------------------------------------------
@@ -342,8 +378,9 @@ if(!paired_data)
                                                  units = angle_unit), # probability density for each observed angle
                                     mu = mu, # ML estimated mean
                                     kappa = kappa, # ML estimated concentration
-                                    log = TRUE) # on a log scale (i.e. add instead of multiplying)
-                        )
+                                    log = TRUE), # on a log scale (i.e. add instead of multiplying)
+                        na.rm = TRUE
+                          )
                       ) 
   # What is the likelihood of orientation towards each trial's mean?
   ll_sample_mean = with(ml_sample_mean[[1]], #using the maximum likelihood von Mises parameters
@@ -352,8 +389,9 @@ if(!paired_data)
                                                  units = angle_unit), # probability density for each observed angle
                                     mu = mu, # ML estimated mean
                                     kappa = kappa, # ML estimated concentration
-                                    log = TRUE) # on a log scale (i.e. add instead of multiplying)
-                        )
+                                    log = TRUE), # on a log scale (i.e. add instead of multiplying)
+                          na.rm = TRUE
+                          )
                       ) + 
                     with(ml_sample_mean[[2]], #using the maximum likelihood von Mises parameters
                         sum( # add together
@@ -361,15 +399,38 @@ if(!paired_data)
                                                  units = angle_unit), # probability density for each observed angle
                                     mu = mu, # ML estimated mean
                                     kappa = kappa, # ML estimated concentration
-                                    log = TRUE) # on a log scale (i.e. add instead of multiplying)
-                        )
-  ) 
+                                    log = TRUE), # on a log scale (i.e. add instead of multiplying)
+                          na.rm = TRUE
+                          )
+                    )
+  # What is the likelihood of orientation towards the grand mean, but with different concentrations?
+  ll_sample_kappa = with(ml_sample_kappa[[1]], #using the maximum likelihood von Mises parameters
+                        sum( # add together
+                          dvonmises(x = circular(adata$angle_1,
+                                                 units = angle_unit), # probability density for each observed angle
+                                    mu = mu, # ML estimated mean
+                                    kappa = kappa, # ML estimated concentration
+                                    log = TRUE), # on a log scale (i.e. add instead of multiplying)
+                          na.rm = TRUE
+                          )
+                      ) + 
+                    with(ml_sample_kappa[[2]], #using the maximum likelihood von Mises parameters
+                        sum( # add together
+                          dvonmises(x = circular(adata$angle_2,
+                                                 units = angle_unit), # probability density for each observed angle
+                                    mu = mu, # ML estimated mean
+                                    kappa = kappa, # ML estimated concentration
+                                    log = TRUE), # on a log scale (i.e. add instead of multiplying)
+                          na.rm = TRUE
+                          )
+                        ) 
   
   # Just to confirm the V-test, what is the likelihood of a uniform distribution?
   ll_uniform = with(adata,
                     sum(log(dcircularuniform(x = circular(x = c(angle_1, angle_2),
-                                                     units = angle_unit))) #return log probability
-                    )
+                                                     units = angle_unit))), #return log probability
+                        na.rm = TRUE
+                        )
   )
 }else
 {
@@ -485,12 +546,10 @@ legend(x = 'bottomright',
   #generic mean angle calculator
 MeanRvm = function(n, mu = circular(0), kappa, au = 'degrees')
 {
-  Mod360.180(
   mean.circular(rvonmises(n = n, 
                           mu = circular(mu, units = au), 
                           kappa = kappa,
                           control.circular = list(units = au)))
-  )
 }
 #simulate von Mises distributions with the ML parameters and calculate the mean
 sim_means = with(ml_diff, 
@@ -502,8 +561,8 @@ sim_means = with(ml_diff,
                  )
 )
 #find the 95% confidence interval
-sim_diffs_CI = quantile.circular(x = circular(sim_means, units = angle_unit),
-                                 probs = c(0,1)+0.5*c(1,-1)*0.05)
+sim_diffs_CI = Mod360.180(quantile.circular(x = circular(sim_means, units = angle_unit),
+                                 probs = c(0,1)+0.5*c(1,-1)*0.05) )
 # pair_diffs_CI = mle.vonmises.bootstrap.ci(x = circular(pair_diffs,units = angle_unit),
 #                                           bias = TRUE,
 #                                           reps = 1e4)
@@ -625,9 +684,6 @@ legend(x = 'bottom',
 }     
 # Perform likelihood ratio test -------------------------------------------
 
-# **WIP** got this far --------------------------------------------------------
-
-
 #The likelihood ratio test compares models by estimating the likelihood gained
 #for each additional parameter.
 #https://en.wikipedia.org/wiki/Likelihood-ratio_test
@@ -636,28 +692,47 @@ legend(x = 'bottom',
 # How much does the extra parameter increase the likelihood?
 
 #convert likelihood to deviance (more likely = lower deviance)
+if(!paired_data)
+{
 #on the original data
-dev_grand_mean = -ll_grand_mean*2 #deviance is -loglikelihood x 2
-dev_sample_mean = -ll_sample_mean*2 #deviance is -loglikelihood x 2
-dev_expect_mean = -ll_expect_mean*2 #deviance is -loglikelihood x 2
-dev_uniform = -ll_uniform*2 #deviance is -loglikelihood x 2
+  dev_grand_mean = -ll_grand_mean*2 #deviance is -loglikelihood x 2
+  dev_sample_mean = -ll_sample_mean*2 #deviance is -loglikelihood x 2
+  dev_sample_kappa = -ll_sample_kappa*2 #deviance is -loglikelihood x 2
+  dev_uniform = -ll_uniform*2 #deviance is -loglikelihood x 2
+}else
+{
 #on the distribution of pairs
-dev_diff = -ll_diff*2 #deviance is -loglikelihood x 2
-dev_same = -ll_same*2 #deviance is -loglikelihood x 2
-
+  dev_diff = -ll_diff*2 #deviance is -loglikelihood x 2
+  dev_same = -ll_same*2 #deviance is -loglikelihood x 2
+}
 #compile model details
-mod_details = data.frame(
-                modnm = c('grand mean', 'trial mean', 'pair mean', 'uniform', 'pairs diff', 'pairs same'),
-                ll = c(ll_grand_mean, ll_sample_mean, ll_expect_mean, ll_uniform, ll_diff, ll_same),
-                deviance = c(dev_grand_mean, dev_sample_mean, dev_expect_mean, dev_uniform, dev_diff, dev_same),
-                rnk = rank(c(dev_grand_mean, dev_sample_mean, dev_expect_mean, dev_uniform, Inf, Inf)),#paired differences use fewer observations, don't include in ranking 
-                df = c(2, 4, length(adata$angle_1)*2, 0, 2, 1)
+mod_details = if(!paired_data)
+              {
+              data.frame(
+                modnm = c('grand mean', 'trial mean', 'trial kappa', 'uniform'),
+                ll = c(ll_grand_mean, ll_sample_mean, ll_sample_kappa, ll_uniform),
+                deviance = c(dev_grand_mean, dev_sample_mean, dev_sample_kappa, dev_uniform),
+                rnk = rank(c(dev_grand_mean, dev_sample_mean, dev_sample_kappa, dev_uniform)),#paired differences use fewer observations, don't include in ranking 
+                df = c(2, 4, 3, 0)
                          )
+              }else
+              {
+              data.frame(
+                modnm = c('pairs diff', 'pairs same'),
+                ll = c(ll_diff, ll_same),
+                deviance = c(dev_diff, dev_same),
+                rnk = rank(c(dev_diff, dev_same)),#paired differences use fewer observations, don't include in ranking 
+                df = c(2, 1)
+                         )
+              }
 #set up tests for three hypotheses
-lr_tests = c('uniformity', # data are uniformly or non-uniformly distributed
-             'pairs_correlated', # pairs share the same mean (independently of trials)
-             'trials_same_mean',
-             'pairs_diff_zero') # trials share the same mean
+lr_tests = if(!paired_data)
+            {
+            c('uniformity', # data are uniformly or non-uniformly distributed
+             'trials_same_mean') # trials share the same mean
+            }else
+            {'pairs_diff_zero'} #mean of pairs is zero
+
 #function to prepare and perform the LR test
 LR_calc = function(tst, mdt)
 {
@@ -672,20 +747,14 @@ LR_calc = function(tst, mdt)
                        dev1 = deviance[rnk == 1], #lowest rank is most likely model, any non-uniform distribution
                        d.f. = df[rnk == 1] #uniform has 0 degrees of freedom, test degrees of freedom are best model - 0
                                  ),
-#test for pairing (pairs have same mean)
-         pairs_correlated = data.frame(
-                       dev0 = deviance[modnm == 'trial mean'], #null hypothesis: pairs differ across trials
-                       dev1 = deviance[modnm == 'pair mean'], #pairs share a mean, expect lower deviance with more params
-                       d.f. = df[modnm == 'pair mean'] -
-                               df[modnm == 'trial mean'] #trial comparison has only two means, fewer params
-                                 ),
 #test for unpaired grand mean
          trials_same_mean = data.frame(
-                       dev0 = deviance[modnm == 'grand mean'], #null hypothesis: trials don't differ
+                       dev0 = deviance[rnk == 2], #null hypothesis: trials don't differ
                        dev1 = deviance[modnm == 'trial mean'], #within trial obs. share a mean, expect lower deviance with more params
                        d.f. = df[modnm == 'trial mean'] -
-                               df[modnm == 'grand mean'] #grand mean has half the number of params
+                               df[rnk == 2] #2nd best fitting model
                                  ),
+#test for nonzero differences of pairs
         pairs_diff_zero = data.frame(
                        dev0 = deviance[modnm == 'pairs same'], #null hypothesis: trials don't differ
                        dev1 = deviance[modnm == 'pairs diff'], #within trial obs. share a mean, expect lower deviance with more params
@@ -715,7 +784,7 @@ LR_calc = function(tst, mdt)
                         {
                           p_adjusted = p.adjust(p = p,
                                                 method = 'BH',
-                                                n = 3)#could this be flexible?
+                                                n = length(p))#could this be flexible?
                         }
                    )
    return(lr_res)
@@ -729,9 +798,6 @@ H1label = function(tst, d0, d1, pa)
          uniformity = if(d0 > d1 & pa <0.05) # data may be oriented, not significantly oriented, or significantly disoriented
          {'data are significantly oriented'}else
          {'data _are not_ significantly oriented'},
-         pairs_correlated = if(d0 > d1 & pa <0.05) # pairs may share a mean, share no significant mean, or significantly differ in mean
-         {'data are significantly paired'}else
-         {'data _are not_ significantly paired'},
          trials_same_mean = if(d0 > d1 & pa <0.05) # trials significantly differ in mean, not significantly differ in mean, or share a significant mean
          {'trial means differ significantly'}else
          {'trial means _do not_ differ significantly'},
@@ -765,12 +831,15 @@ all_results = within(all_results,
 Exmu = function(ml){round(ml$mu, 3)}
 all_results = within(all_results,
                      {
-                     directions = c(paste0(Exmu(ml_grand_mean),'°'),
-                                    paste0(sapply(ml_ex,Exmu),'°, ', collapse = ''),
-                                    paste0(sapply(ml_sample_mean,Exmu),'°, ', collapse = ''),
-                                    paste0(Exmu(ml_diff),'°, ', collapse = '')
-                                    )
-                      }
+                     directions = if(!paired_data)
+                                    {
+                                   c(paste0(Exmu(ml_grand_mean),'°'),
+                                    paste0(sapply(ml_sample_mean,Exmu),'°, ', collapse = '') )
+                                     }else
+                                     {
+                                   paste0(Exmu(ml_diff),'°, ', collapse = '')
+                                     }
+                     }
                      )
 #print the results for the user                     
 with(all_results,
@@ -783,11 +852,15 @@ with(all_results,
             )
       }
 )
-message(c('trial means\n', 
-      paste0(sapply(ml_sample_mean,Exmu),'°, ', collapse = ''), 
-      '\nestimated difference\n', 
-      Exmu(ml_diff)
-      )
+message(
+      '\nestimated difference\n',
+      if(!paired_data)
+      {
+      round(diff(circular(x = sapply(ml_sample_mean,Exmu), units = angle_unit)),3) 
+      }else
+      {
+       Exmu(ml_diff)
+      }
       )
 
 # Save result -------------------------------------------------------------
@@ -800,168 +873,11 @@ write.table(x = apply(X = all_results,
                                        replacement = '',
                                        x = basename(path_file)
                              ),
-                             'Paired A test result.csv'#ending in mean test
+                             if(!paired_data)
+                             {'2-sample A test result.csv'}else
+                             {'Paired A test result.csv'}
                              )
             ),
             row.names = FALSE,#rows do not need names
             sep = csv_sep #Use same separator as original csv file
 )
-
-
-  # # Random Effects model WIP ------------------------------------------------
-  # 
-  # REcirc = function(a1, 
-  #                   a2, 
-  #                   au = 'degrees',
-  #                   trc = 0
-  # )
-  # {
-  #   Get_mu = function(m){m$mu}
-  #   Get_kappa = function(m){m$kappa}
-  #   grand_mod = mle.vonmises(circular(x = c(a1, a2), units = au))  
-  #   trial_mod = apply(X =  cbind(circular(a1,units = au),
-  #                                circular(a2,units = au)),
-  #                     MARGIN = 2,
-  #                     FUN = function(angs)
-  #                     {
-  #                       mle.vonmises(x = circular(angs,units = au),
-  #                                    bias = TRUE)
-  #                     }
-  #   )
-  #   pair_mod = apply(X =  cbind(circular(a1,units = au),
-  #                               circular(a2,units = au)), 
-  #                    MARGIN = 1, 
-  #                    FUN = function(angs)
-  #                    {
-  #                      mle.vonmises(x = if(identical(angs[1],angs[2]))
-  #                      {circular(x = as.numeric(angs),
-  #                                units = au)+ #tie break by separating angles 
-  #                          circular(x = c(-1,1)*0.5, # by 1 degree
-  #                                   units = au) #TODO better tie break,
-  #                      }else{circular(x = angs,
-  #                                     units = au)
-  #                      },
-  #                      bias = TRUE)
-  #                    }
-  #   )
-  #   indiv_mod = mle.vonmises(x = circular(x = 
-  #                                           sapply(X = pair_mod, 
-  #                                                  FUN = Get_mu),
-  #                                         units = au)
-  #   )
-  #   grand_mu = Get_mu(grand_mod)
-  #   grand_logkappa = log(Get_kappa(grand_mod))
-  #   trial_mu = sapply(X = trial_mod, FUN = Get_mu) - grand_mu
-  #   trial_logkappa = log(sapply(X = trial_mod, FUN = Get_kappa)) - grand_logkappa
-  #   pair_mu = sapply(X = pair_mod, FUN = Get_mu) - grand_mu
-  #   pair_logkappa = log(sapply(X = pair_mod, FUN = Get_kappa)) - grand_logkappa
-  #   indiv_mu = Get_mu(indiv_mod)
-  #   indiv_logkappa = log(Get_kappa(indiv_mod))
-  #   
-  #   start_par = c(as.numeric(grand_mu) %% 360,#1 
-  #                 grand_logkappa,#2
-  #                 as.numeric(trial_mu) %% 360, #34
-  #                 trial_logkappa,#56 
-  #                 as.numeric(pair_mu) %% 360, #6+i
-  #                 pair_logkappa,#6+N+i 
-  #                 indiv_logkappa #6+2N + 1
-  #   )
-  #   start_par[is.infinite(start_par)] = -10
-  #   LLopt = function(a1, a2, au = au, prms)
-  #   {
-  #     mm = prms[c(1,
-  #                 3,
-  #                 4,
-  #                 6+1:length(a1))]
-  #     if(any(mm > 360-1e-16) |
-  #        any(mm < 0))
-  #     {
-  #       neg_ll = 1e9
-  #     }else
-  #     {
-  #       ll = sum(
-  #         sapply(X = 1:length(a1),
-  #                au = au,
-  #                prms = prms,
-  #                FUN =  function(i, prms, au)
-  #                {
-  #                  dvonmises(x = circular(a1[i], units = au), 
-  #                            mu = circular(prms[1] + # grand mean 
-  #                                            prms[3] + #trial 1 mean
-  #                                            prms[6+i], units = au), #pair i mean
-  #                            kappa = exp(prms[2] + # grand kappa 
-  #                                          prms[5] + #trial 1 kappa
-  #                                          prms[6+length(a1)+i]), #pair i kappa
-  #                            log = TRUE
-  #                  )
-  #                  + dvonmises(x = circular(a2[i], units = au), 
-  #                              mu = circular(prms[2] + # grand mean 
-  #                                              prms[4] + #trial 2 mean
-  #                                              prms[6+i], units = au), #pair i mean
-  #                              kappa = exp(prms[2] + # grand kappa 
-  #                                            prms[6] + #trial 1 kappa
-  #                                            prms[6+length(a1)+i]), #pair i kappa
-  #                              log = TRUE
-  #                  )
-  #                  
-  #                }
-  #         )
-  #       )+ 
-  #         sum(
-  #           dvonmises(x = circular(prms[6+1:length(a1)], 
-  #                                  units = au),
-  #                     mu = circular(0),
-  #                     kappa = exp(prms[6+2*length(a1)+1]),
-  #                     log = TRUE
-  #           )#indiv_kappa
-  #         )
-  #       neg_ll = -ll
-  #       # if(is.infinite(neg_ll)){neg_ll = 1e9}
-  #     }
-  #     return(neg_ll)
-  #   }
-  #   # LLopt(a1, a2, au = au, prms = start_par)
-  #   opt = optim(par = start_par,
-  #               fn = LLopt,
-  #               a1 = a1,
-  #               a2 = a2,
-  #               au = au,
-  #               control = list(trace = trc)
-  #   )
-  #   return(opt)
-  # }
-  # 
-  # opt_remod = REcirc(a1 = adata$angle_1, a2 = adata$angle_2)
-  # ll_remod = with(adata,
-  #                 {
-  #                   sum(
-  #                     sapply(X = 1:length(angle_1),
-  #                            au = angle_unit,
-  #                            prms = opt_remod$par,
-  #                            FUN =  function(i, prms, au)
-  #                            {
-  #                              dvonmises(x = circular(angle_1[i], units = au), 
-  #                                        mu = circular(prms[1] + # grand mean 
-  #                                                        prms[3] + #trial 1 mean
-  #                                                        prms[6+i], units = au), #pair i mean
-  #                                        kappa = exp(prms[2] + # grand kappa 
-  #                                                      prms[5] + #trial 1 kappa
-  #                                                      prms[6+length(angle_1)+i]), #pair i kappa
-  #                                        log = TRUE
-  #                              )
-  #                              + dvonmises(x = circular(angle_2[i], units = au), 
-  #                                          mu = circular(prms[2] + # grand mean 
-  #                                                          prms[4] + #trial 2 mean
-  #                                                          prms[6+i], units = au), #pair i mean
-  #                                          kappa = exp(prms[2] + # grand kappa 
-  #                                                        prms[6] + #trial 1 kappa
-  #                                                        prms[6+length(angle_1)+i]), #pair i kappa
-  #                                          log = TRUE
-  #                              )
-  #                              
-  #                            }
-  #                     )
-  #                   )
-  #                 }
-  # )
-
