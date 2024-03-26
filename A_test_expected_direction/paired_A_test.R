@@ -2,7 +2,7 @@
 graphics.off()
 # Details ---------------------------------------------------------------
 #       AUTHOR:	James Foster              DATE: 2024 03 22
-#     MODIFIED:	James Foster              DATE: 2024 03 25
+#     MODIFIED:	James Foster              DATE: 2024 03 26
 #
 #  DESCRIPTION: Loads a text file with paired data and performs an 
 #               "inverse" V test for directedness towards an expected mean angle. 
@@ -14,6 +14,7 @@ graphics.off()
 #      OUTPUTS: Results table (.csv).
 #
 #	   CHANGES: - Combined 3 model selection procedure
+#	            - Test on paired differences
 #
 #   REFERENCES: Batschelet E (1981).
 #               The Rayleigh test, Chap 4.2, p. 54
@@ -33,6 +34,8 @@ graphics.off()
 #- Accurate simulation +
 #- Appropriate comparison strategy +
 #- Neaten up model comparison +
+#- A test on differences +
+#- Simplify to test of differences
 #- Optimisation method for pairs (ML too biased?)
 #- Tie-breaking approach
 #- Comment in detail
@@ -70,7 +73,7 @@ if(sys_win){
 
   # # Simulate data (not used) ------------------------------------------------
   # n_angles = 44
-  # mu_offset = circular(x = rad(65) )
+  # mu_offset = circular(x = rad(-30) )
   # # minimum discriminable angle appears to be approx 35°
   # kappa_both = A1inv(0.7) #concentration around each trial mean
   # kappa_indiv = A1inv(0.98) #concentration across individuals (pairs)
@@ -260,9 +263,13 @@ rayv_test = rayleigh.test( x = cangs,
 print(rayv_test)
 
 
-# Calculate log-likelihoods -----------------------------------------------
+# Fit maximum likelihood models -----------------------------------------------
 # The v-test has identified a non-uniform distribution with
 # a large component in the expected direction.
+
+
+# . Fit models ------------------------------------------------------------
+
 
 #find the maximum likelihood von Mises distribution for the full dataset
 
@@ -310,6 +317,34 @@ ml_ex = with(adata,
                    }
              ) # correct bias
 )
+
+pair_diffs = with(adata, 
+                   {
+                     apply(X = cbind(circular(angle_2,units = angle_unit),
+                                      circular(angle_1,units = angle_unit)), 
+                                        MARGIN = 1, 
+                                        FUN = function(angs)
+                                        {
+                                          diff(x = circular(x = as.numeric(angs),
+                                                            units = angle_unit) )
+                                          
+                                        }
+                           )
+                   }
+                  )
+
+ml_diff = mle.vonmises(x = circular(x = unlist(pair_diffs),
+                                    units = angle_unit),
+                      bias = TRUE)
+
+ml_same = mle.vonmises(x = circular(x = unlist(pair_diffs),
+                                    units = angle_unit),
+                       mu = circular(x = 0, units = angle_unit),
+                       bias = TRUE)
+
+
+# . Calculate log likelihoods ---------------------------------------------
+
 
 # What is the likelihood of orientation towards the grand mean?
 ll_grand_mean = with(ml_up, #using the maximum likelihood von Mises parameters
@@ -373,6 +408,28 @@ ll_uniform = with(adata,
                                                    units = angle_unit))) #return log probability
                   )
 )
+
+# calculate the likelihood of pair differences centred on the ML difference
+ll_diff = with(ml_diff, #using the maximum likelihood von Mises parameters
+                     sum( # add together
+                       dvonmises(x = circular(x = pair_diffs,
+                                              units = angle_unit), # probability density for each observed angle
+                                 mu = mu, # ML estimated mean
+                                 kappa = kappa, # ML estimated concentration
+                                 log = TRUE) # on a log scale (i.e. add instead of multiplying)
+                     )
+)
+
+# calculate the likelihood of pair differences centred on the ML difference
+ll_same = with(ml_same, #using the maximum likelihood von Mises parameters
+                     sum( # add together
+                       dvonmises(x = circular(x = pair_diffs,
+                                              units = angle_unit), # probability density for each observed angle
+                                 mu = mu, # ML estimated mean
+                                 kappa = kappa, # ML estimated concentration
+                                 log = TRUE) # on a log scale (i.e. add instead of multiplying)
+                     )
+) 
 
 # Add ML models to the figure ---------------------------------------------
 
@@ -498,6 +555,135 @@ legend(x = 'bottomright',
 #expected mean, for which we need to fit one fewer parameter (we already know the mean).
 
 
+# Plot paired differences -------------------------------------------------
+
+#bootstrap CI
+pair_diffs_CI = mle.vonmises.bootstrap.ci(x = circular(pair_diffs,units = angle_unit),
+                                          bias = TRUE,
+                                          reps = 1e4)
+#sim CI
+MeanRvm = function(n, mu = circular(0), kappa, au = 'degrees')
+{
+  mean.circular(rvonmises(n = n, 
+                          mu = circular(mu, units = au), 
+                          kappa = kappa,
+                          control.circular = list(units = au)))
+}
+sim_means = with(ml_diff, 
+                 replicate(n = 1e4, 
+                           MeanRvm(n = length(pair_diffs), 
+                                   mu = mu, 
+                                   kappa = kappa)
+                 )
+)
+sim_diffs_CI = quantile.circular(x = circular(sim_means, units = angle_unit),
+                                 probs = c(0,1)+0.5*c(1,-1)*0.05)
+pair_diffs_CI = mle.vonmises.bootstrap.ci(x = circular(pair_diffs,units = angle_unit),
+                                          bias = TRUE,
+                                          reps = 1e4)
+
+#open plot
+par(mar =rep(0,4))
+plot.circular(x = circular(x = pair_diffs, 
+                           type = 'angles',
+                           unit = 'degrees',
+                           modulo = '2pi',
+                           zero = pi/2,
+                           rotation = 'clock'
+),
+stack = TRUE,
+bins = 360/5,
+sep = 0.5/dt_dim[1],
+col = 'orange3'
+)
+arrows.circular(x = circular(x = 0, 
+                             type = 'angles',
+                             unit = 'degrees',
+                             modulo = '2pi',
+                             zero = pi/2,
+                             rotation = 'clock'
+),
+y = 1,
+lwd = 5, 
+col = rgb(0,0,0,0.1),
+length = 0
+)
+mtext(text = 'change in heading',
+      side = 3, 
+      line = -17)
+with(ml_same,
+     {
+arrows.circular(x = circular(x = mu, 
+                             type = 'angles',
+                             unit = 'degrees',
+                             template = 'geographics',
+                             modulo = '2pi',
+                             zero = pi/2,
+                             rotation = 'clock'
+                            ),
+                            y = A1(kappa),
+                col = 'black',
+                lwd = 2,
+                length = 0.1
+)
+     }
+)
+with(ml_diff,
+     {
+arrows.circular(x = circular(x = mu, 
+                             type = 'angles',
+                             unit = 'degrees',
+                             template = 'geographics',
+                             modulo = '2pi',
+                             zero = pi/2,
+                             rotation = 'clock'
+                            ),
+                            y = A1(kappa),
+                col = 'orange4',
+                lwd = 3,
+                length = 0.1
+)
+     }
+)
+
+Mod360.180 = function(x)
+{#use atan2 to convert any angle to the range (-180,180)
+  deg(
+    atan2(y = sin(rad(x)),
+          x = cos(rad(x))
+    )
+  )
+}
+
+      
+with(pair_diffs_CI,
+     {
+      lines.circular(x = circular(x = 90-(seq(from = max(Mod360.180(mu.ci)),
+                                   to = min(Mod360.180(mu.ci)),
+                                   length.out = 1e3)),
+                        units = angle_unit),  
+                     y = rep(x = 1-0.9,times = 1e3),
+                     col = 'orange', 
+                     lwd = 1)
+       arrows.circular(x = circular(x = 90 -rep(x = ml_diff$mu,times = 2),
+                                    units = angle_unit),
+                       y = A1(kappa.ci),
+                       code = 3,
+                       angle = 90,
+                       length = 0.1,
+                       col = 'orange'
+                       )
+     }
+)
+lines.circular(x = circular(x = 90-
+                              seq(from = max(Mod360.180(sim_diffs_CI)),
+                                   to = min(Mod360.180(sim_diffs_CI)),
+                                   length.out = 1e3),
+                            units = angle_unit),  
+               y = rep(x = 1-0.95,times = 1e3),
+               col = 'orange4', 
+               lwd = 2)
+     
 # Perform likelihood ratio test -------------------------------------------
 #The likelihood ratio test compares models by estimating the likelihood gained
 #for each additional parameter.
@@ -507,22 +693,28 @@ legend(x = 'bottomright',
 # How much does the extra parameter increase the likelihood?
 
 #convert likelihood to deviance (more likely = lower deviance)
+#on the original data
 dev_grand_mean = -ll_grand_mean*2 #deviance is -loglikelihood x 2
 dev_sample_mean = -ll_sample_mean*2 #deviance is -loglikelihood x 2
 dev_expect_mean = -ll_expect_mean*2 #deviance is -loglikelihood x 2
 dev_uniform = -ll_uniform*2 #deviance is -loglikelihood x 2
+#on the distribution of pairs
+dev_diff = -ll_diff*2 #deviance is -loglikelihood x 2
+dev_same = -ll_same*2 #deviance is -loglikelihood x 2
+
 #compile model details
 mod_details = data.frame(
-                modnm = c('grand mean', 'trial mean', 'pair mean', 'uniform'),
-                ll = c(ll_grand_mean, ll_sample_mean, ll_expect_mean, ll_uniform),
-                deviance = c(dev_grand_mean, dev_sample_mean, dev_expect_mean, dev_uniform),
-                rnk = rank(c(dev_grand_mean, dev_sample_mean, dev_expect_mean, dev_uniform)),
-                df = c(2, 4, length(adata$angle_1)*2, 0)
+                modnm = c('grand mean', 'trial mean', 'pair mean', 'uniform', 'pairs diff', 'pairs same'),
+                ll = c(ll_grand_mean, ll_sample_mean, ll_expect_mean, ll_uniform, ll_diff, ll_same),
+                deviance = c(dev_grand_mean, dev_sample_mean, dev_expect_mean, dev_uniform, dev_diff, dev_same),
+                rnk = rank(c(dev_grand_mean, dev_sample_mean, dev_expect_mean, dev_uniform, Inf, Inf)),#paired differences use fewer observations, don't include in ranking 
+                df = c(2, 4, length(adata$angle_1)*2, 0, 2, 1)
                          )
 #set up tests for three hypotheses
 lr_tests = c('uniformity', # data are uniformly or non-uniformly distributed
-             'pairs_same_mean', # pairs share the same mean (independently of trials)
-             'trials_same_mean') # trials share the same mean
+             'pairs_correlated', # pairs share the same mean (independently of trials)
+             'trials_same_mean',
+             'pairs_diff_zero') # trials share the same mean
 #function to prepare and perform the LR test
 LR_calc = function(tst, mdt)
 {
@@ -538,7 +730,7 @@ LR_calc = function(tst, mdt)
                        d.f. = df[rnk == 1] #uniform has 0 degrees of freedom, test degrees of freedom are best model - 0
                                  ),
 #test for pairing (pairs have same mean)
-         pairs_same_mean = data.frame(
+         pairs_correlated = data.frame(
                        dev0 = deviance[modnm == 'trial mean'], #null hypothesis: pairs differ across trials
                        dev1 = deviance[modnm == 'pair mean'], #pairs share a mean, expect lower deviance with more params
                        d.f. = df[modnm == 'pair mean'] -
@@ -550,7 +742,14 @@ LR_calc = function(tst, mdt)
                        dev1 = deviance[modnm == 'trial mean'], #within trial obs. share a mean, expect lower deviance with more params
                        d.f. = df[modnm == 'trial mean'] -
                                df[modnm == 'grand mean'] #grand mean has half the number of params
-                                 )
+                                 ),
+        pairs_diff_zero = data.frame(
+                       dev0 = deviance[modnm == 'pairs same'], #null hypothesis: trials don't differ
+                       dev1 = deviance[modnm == 'pairs diff'], #within trial obs. share a mean, expect lower deviance with more params
+                       d.f. = df[modnm == 'pairs diff'] -
+                               df[modnm == 'pairs same'] #grand mean has half the number of params
+                                 ),
+
          )
        }
   )
@@ -587,12 +786,15 @@ H1label = function(tst, d0, d1, pa)
          uniformity = if(d0 > d1 & pa <0.05) # data may be oriented, not significantly oriented, or significantly disoriented
          {'data are significantly oriented'}else
          {'data _are not_ significantly oriented'},
-         pairs_same_mean = if(d0 > d1 & pa <0.05) # pairs may share a mean, share no significant mean, or significantly differ in mean
-         {'pairs are significantly oriented in the same direction'}else
-         {'pairs _are not_ oriented in the same direction'},
+         pairs_correlated = if(d0 > d1 & pa <0.05) # pairs may share a mean, share no significant mean, or significantly differ in mean
+         {'data are significantly paired'}else
+         {'data _are not_ significantly paired'},
          trials_same_mean = if(d0 > d1 & pa <0.05) # trials significantly differ in mean, not significantly differ in mean, or share a significant mean
          {'trial means differ significantly'}else
-         {'trial means _do not_ differ significantly'}
+         {'trial means _do not_ differ significantly'},
+         pairs_diff_zero = if(d0 > d1 & pa <0.05) # trials significantly differ in mean, not significantly differ in mean, or share a significant mean
+         {'paired trials differ significantly'}else
+         {'paired trials _do not_ differ significantly'}
   )
 }
 
@@ -620,9 +822,10 @@ all_results = within(all_results,
 Exmu = function(ml){round(ml$mu, 3)}
 all_results = within(all_results,
                      {
-                     directions = c(paste0(round(ml_up$mu,3),'°'),
+                     directions = c(paste0(Exmu(ml_up),'°'),
                                     paste0(sapply(ml_ex,Exmu),'°, ', collapse = ''),
-                                    paste0(sapply(ml_vm,Exmu),'°, ', collapse = '')
+                                    paste0(sapply(ml_vm,Exmu),'°, ', collapse = ''),
+                                    paste0(Exmu(ml_diff),'°, ', collapse = '')
                                     )
                       }
                      )
@@ -640,7 +843,7 @@ with(all_results,
 message(c('trial means\n', 
       paste0(sapply(ml_vm,Exmu),'°, ', collapse = ''), 
       '\nestimated difference\n', 
-      diff(sapply(ml_vm,Exmu))
+      Exmu(ml_diff)
       )
       )
 
