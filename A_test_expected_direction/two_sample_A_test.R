@@ -36,8 +36,9 @@ graphics.off()
 #- Appropriate comparison strategy +
 #- Neaten up model comparison +
 #- A test on differences +
-#- V-test on grand mean
-#- Simplify to test of differences
+#- V-test on grand mean + 
+#- Simplify to test of differences +
+#- Rotation direction option (needed for plots)
 #- Tie-breaking approach
 #- Comment in detail
 #- Optimisation method for pairs (ML too biased?)
@@ -74,6 +75,7 @@ paired_data = TRUE # Are the data in the two columns paired (each from the same 
 csv_sep = ','#Is the csv comma separated or semicolon separated? For tab sep, use "\t"
 angle_name = "angles" #The title of the column with angles; NO SPACES PLEASE
 angle_unit = "degrees" # "degrees" or "radians"
+angle_rot = "counter" # "clock" or "counter"
 
 #Check the operating system and assign a logical flag (T or F)
 sys_win <- Sys.info()[['sysname']] == 'Windows'
