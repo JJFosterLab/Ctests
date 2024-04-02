@@ -2,7 +2,7 @@
 graphics.off()
 # Details ---------------------------------------------------------------
 #       AUTHOR:	James Foster              DATE: 2024 03 22
-#     MODIFIED:	James Foster              DATE: 2024 03 26
+#     MODIFIED:	James Foster              DATE: 2024 04 02
 #
 #  DESCRIPTION: Loads a text file with paired data and performs an 
 #               "inverse" V test for directedness towards an expected mean angle. 
@@ -38,7 +38,8 @@ graphics.off()
 #- A test on differences +
 #- V-test on grand mean + 
 #- Simplify to test of differences +
-#- Rotation direction option (needed for plots)
+#- Rotation direction option (needed for plots) +
+#- Troubleshoot plotting direction
 #- Tie-breaking approach
 #- Comment in detail
 #- Optimisation method for pairs (ML too biased?)
@@ -89,7 +90,6 @@ if(sys_win){
 
   # # Simulate data (not used) ------------------------------------------------
   # n_angles = 44
-  # mu_offset = circular(x = rad(-30) )
   # # minimum discriminable angle appears to be approx 35°
   # kappa_both = A1inv(0.7) #concentration around each trial mean
   # logkappa_var = 1.0 #scale of random variation in concentration (log units)
@@ -198,7 +198,7 @@ ref_angle = with(adata,
                                                           template = 'geographics',
                                                           modulo = '2pi',
                                                           zero = pi/2,
-                                                          rotation = 'clock'),
+                                                          rotation = angle_rot),
                                  na.rm = TRUE
                                )
                  } 
@@ -213,7 +213,7 @@ plot.circular(x = circular(x = adata$angle_1,
                            template = 'geographics',
                            modulo = '2pi',
                            zero = pi/2,
-                           rotation = 'clock'
+                           rotation = angle_rot
 ),
 stack = TRUE,
 bins = 360/5,
@@ -227,7 +227,7 @@ plot.circular(x = circular(x = adata$angle_2,
                            template = 'geographics',
                            modulo = '2pi',
                            zero = pi/2,
-                           rotation = 'clock'
+                           rotation = angle_rot
 ),
 stack = TRUE,
 bins = 360/5,
@@ -238,10 +238,11 @@ axes = F
 )
 arrows.circular(x = circular(x = ref_angle, 
                              type = 'angles',
-                             unit = 'degrees',
+                             unit = angle_unit,
+                             template = 'geographics',
                              modulo = '2pi',
                              zero = pi/2,
-                             rotation = 'clock'
+                             rotation = angle_rot
 ),
 y = 1,
 lwd = 5, 
@@ -250,11 +251,11 @@ length = 0
 )
 arrows.circular(x = circular(x = ref_angle, 
                              type = 'angles',
-                             unit = 'degrees',
+                             unit = angle_unit,
                              template = 'geographics',
                              modulo = '2pi',
                              zero = pi/2,
-                             rotation = 'clock'
+                             rotation = angle_rot
                             ),
                 y = mean(x = 
                   cos(x = with(adata, c(angle_1, angle_2) - ref_angle)* pi/180), 
@@ -274,8 +275,9 @@ lines.circular(x = circular(x =
 #convert angles to circular class
 cangs = with(adata, circular(x = c(angle_1 , 
                                     angle_2), 
-                             unit = angle_unit) )
-emean = circular(ref_angle, unit = angle_unit)
+                             unit = angle_unit,
+                             rotation = angle_rot) )
+emean = circular(ref_angle, unit = angle_unit, rotation = angle_rot)
 
 rayv_test = rayleigh.test( x = cangs,
                            mu = emean
@@ -301,33 +303,35 @@ if(!paired_data)
   ml_grand_mean = with(adata,
              mle.vonmises(x = circular(c(angle_1,
                                          angle_2),
-                                         units = angle_unit
+                                         units = angle_unit,
+                                       rotation = angle_rot
                                        ),
                                   bias = TRUE)# correct bias
               )
   
   #find the maximum likelihood von Mises distribution for each column
   ml_sample_mean = with(adata,
-             apply(X =  cbind(circular(angle_1,units = angle_unit),
-                              circular(angle_2,units = angle_unit)),
+             apply(X =  cbind(circular(angle_1,units = angle_unit, rotation = angle_rot),
+                              circular(angle_2,units = angle_unit, rotation = angle_rot)),
                    MARGIN = 2,
                    FUN = function(angs)
                      {
-                     mle.vonmises(x = circular(angs,units = angle_unit),
+                     mle.vonmises(x = circular(angs,units = angle_unit, rotation = angle_rot),
                                   bias = TRUE)
                      }
                    ) # correct bias
               )
   #find the maximum likelihood von Mises distribution for each column
   ml_sample_kappa = with(adata,
-             apply(X =  cbind(circular(angle_1,units = angle_unit),
-                              circular(angle_2,units = angle_unit)),
+             apply(X =  cbind(circular(angle_1,units = angle_unit, rotation = angle_rot),
+                              circular(angle_2,units = angle_unit, rotation = angle_rot)),
                    MARGIN = 2,
                    FUN = function(angs)
                      {
-                     mle.vonmises(x = circular(angs,units = angle_unit),
+                     mle.vonmises(x = circular(angs,units = angle_unit, rotation = angle_rot),
                                   mu = circular(ml_grand_mean$mu,
-                                                units = angle_unit),
+                                                units = angle_unit,
+                                                rotation = angle_rot),
                                   bias = TRUE)
                      }
                    ) # correct bias
@@ -339,13 +343,14 @@ if(!paired_data)
   #pairwise angular differences, positive indicates a turn to the right between trials
   pair_diffs = with(adata, 
                      {
-                       apply(X = cbind(circular(angle_2,units = angle_unit), # subtract 2nd angle
-                                        circular(angle_1,units = angle_unit)), #from the 1st angle
+                       apply(X = cbind(circular(angle_1,units = angle_unit, rotation = angle_rot), # subtract 1st angle
+                                        circular(angle_2,units = angle_unit, rotation = angle_rot)), #from the 2nd angle
                                           MARGIN = 1, 
                                           FUN = function(angs)
                                           {
                                             diff(x = circular(x = as.numeric(angs),
-                                                              units = angle_unit) )
+                                                              units = angle_unit,
+                                                              rotation = angle_rot) )
                                             
                                           }
                              )
@@ -355,7 +360,8 @@ if(!paired_data)
   # if angles shift in one direction between trials,
   # this distribution should have significantly higher likelihood
   ml_diff = mle.vonmises(x = circular(x = unlist(pair_diffs),
-                                      units = angle_unit),
+                                      units = angle_unit,
+                                      rotation = angle_rot),
                         bias = TRUE)
   
   #fit the maximum likelihood distribution for differences centred on zero
@@ -363,8 +369,9 @@ if(!paired_data)
   # this distribution should have similar likelihood,
   # with one less free parameter (expected mean of zero) 
   ml_same = mle.vonmises(x = circular(x = unlist(pair_diffs),
-                                      units = angle_unit),
-                         mu = circular(x = 0, units = angle_unit),
+                                      units = angle_unit,
+                                      rotation = angle_rot),
+                         mu = circular(x = 0, units = angle_unit, rotation = angle_rot),
                          bias = TRUE)
 }
 
@@ -377,7 +384,8 @@ if(!paired_data)
   ll_grand_mean = with(ml_grand_mean, #using the maximum likelihood von Mises parameters
                         sum( # add together
                           dvonmises(x = circular(with(adata,c(angle_1,angle_2)),
-                                                 units = angle_unit), # probability density for each observed angle
+                                                 units = angle_unit,
+                                                 rotation = angle_rot), # probability density for each observed angle
                                     mu = mu, # ML estimated mean
                                     kappa = kappa, # ML estimated concentration
                                     log = TRUE), # on a log scale (i.e. add instead of multiplying)
@@ -388,7 +396,8 @@ if(!paired_data)
   ll_sample_mean = with(ml_sample_mean[[1]], #using the maximum likelihood von Mises parameters
                         sum( # add together
                           dvonmises(x = circular(adata$angle_1,
-                                                 units = angle_unit), # probability density for each observed angle
+                                                 units = angle_unit,
+                                                 rotation = angle_rot), # probability density for each observed angle
                                     mu = mu, # ML estimated mean
                                     kappa = kappa, # ML estimated concentration
                                     log = TRUE), # on a log scale (i.e. add instead of multiplying)
@@ -398,7 +407,8 @@ if(!paired_data)
                     with(ml_sample_mean[[2]], #using the maximum likelihood von Mises parameters
                         sum( # add together
                           dvonmises(x = circular(adata$angle_2,
-                                                 units = angle_unit), # probability density for each observed angle
+                                                 units = angle_unit,
+                                                 rotation = angle_rot), # probability density for each observed angle
                                     mu = mu, # ML estimated mean
                                     kappa = kappa, # ML estimated concentration
                                     log = TRUE), # on a log scale (i.e. add instead of multiplying)
@@ -409,7 +419,8 @@ if(!paired_data)
   ll_sample_kappa = with(ml_sample_kappa[[1]], #using the maximum likelihood von Mises parameters
                         sum( # add together
                           dvonmises(x = circular(adata$angle_1,
-                                                 units = angle_unit), # probability density for each observed angle
+                                                 units = angle_unit,
+                                                 rotation = angle_rot), # probability density for each observed angle
                                     mu = mu, # ML estimated mean
                                     kappa = kappa, # ML estimated concentration
                                     log = TRUE), # on a log scale (i.e. add instead of multiplying)
@@ -419,7 +430,8 @@ if(!paired_data)
                     with(ml_sample_kappa[[2]], #using the maximum likelihood von Mises parameters
                         sum( # add together
                           dvonmises(x = circular(adata$angle_2,
-                                                 units = angle_unit), # probability density for each observed angle
+                                                 units = angle_unit,
+                                                 rotation = angle_rot), # probability density for each observed angle
                                     mu = mu, # ML estimated mean
                                     kappa = kappa, # ML estimated concentration
                                     log = TRUE), # on a log scale (i.e. add instead of multiplying)
@@ -430,7 +442,8 @@ if(!paired_data)
   # Just to confirm the V-test, what is the likelihood of a uniform distribution?
   ll_uniform = with(adata,
                     sum(log(dcircularuniform(x = circular(x = c(angle_1, angle_2),
-                                                     units = angle_unit))), #return log probability
+                                                     units = angle_unit,
+                                                     rotation = angle_rot))), #return log probability
                         na.rm = TRUE
                         )
   )
@@ -443,7 +456,8 @@ if(!paired_data)
   ll_diff = with(ml_diff, #using the maximum likelihood von Mises parameters
                        sum( # add together
                          dvonmises(x = circular(x = pair_diffs,
-                                                units = angle_unit), # probability density for each observed angle
+                                                units = angle_unit,
+                                                rotation = angle_rot), # probability density for each observed angle
                                    mu = mu, # ML estimated mean
                                    kappa = kappa, # ML estimated concentration
                                    log = TRUE) # on a log scale (i.e. add instead of multiplying)
@@ -454,7 +468,8 @@ if(!paired_data)
   ll_same = with(ml_same, #using the maximum likelihood von Mises parameters
                        sum( # add together
                          dvonmises(x = circular(x = pair_diffs,
-                                                units = angle_unit), # probability density for each observed angle
+                                                units = angle_unit,
+                                                rotation = angle_rot), # probability density for each observed angle
                                    mu = mu, # ML estimated mean
                                    kappa = kappa, # ML estimated concentration
                                    log = TRUE) # on a log scale (i.e. add instead of multiplying)
@@ -469,7 +484,8 @@ if(!paired_data)
 aa = circular(x = seq(from = -180,#or: bearing - pi/2
                       to = 180, #or: bearing + pi/2
                       length.out = 1e3),
-              unit = angle_unit)
+              unit = angle_unit,
+              rotation = angle_rot)
 
 if(!paired_data)
 {
@@ -546,12 +562,12 @@ legend(x = 'bottomright',
   #                                           reps = 1e4)
 #simulate CI
   #generic mean angle calculator
-MeanRvm = function(n, mu = circular(0), kappa, au = 'degrees')
+MeanRvm = function(n, mu = circular(0), kappa, au = 'degrees', ar = 'clock')
 {
   mean.circular(rvonmises(n = n, 
-                          mu = circular(mu, units = au), 
+                          mu = circular(mu, units = au, rotation = ar), 
                           kappa = kappa,
-                          control.circular = list(units = au)))
+                          control.circular = list(units = au, rotation = ar)))
 }
 #simulate von Mises distributions with the ML parameters and calculate the mean
 sim_means = with(ml_diff, 
@@ -559,11 +575,12 @@ sim_means = with(ml_diff,
                            MeanRvm(n = length(pair_diffs), 
                                    mu = mu, 
                                    kappa = kappa,
-                                   au = angle_unit)
+                                   au = angle_unit,
+                                   ar = angle_rot)
                  )
 )
 #find the 95% confidence interval
-sim_diffs_CI = Mod360.180(quantile.circular(x = circular(sim_means, units = angle_unit),
+sim_diffs_CI = Mod360.180(quantile.circular(x = circular(sim_means, units = angle_unit, rotation = angle_rot),
                                  probs = c(0,1)+0.5*c(1,-1)*0.05) )
 # pair_diffs_CI = mle.vonmises.bootstrap.ci(x = circular(pair_diffs,units = angle_unit),
 #                                           bias = TRUE,
@@ -573,10 +590,10 @@ sim_diffs_CI = Mod360.180(quantile.circular(x = circular(sim_means, units = angl
 par(mar =rep(0,4))
 plot.circular(x = circular(x = pair_diffs, 
                            type = 'angles',
-                           unit = 'degrees',
+                           unit = angle_unit,
                            modulo = '2pi',
                            zero = pi/2,
-                           rotation = 'clock'
+                           rotation = angle_rot
 ),
 stack = TRUE,
 bins = 360/5,
@@ -588,7 +605,7 @@ arrows.circular(x = circular(x = 0,
                              unit = 'degrees',
                              modulo = '2pi',
                              zero = pi/2,
-                             rotation = 'clock'
+                             rotation = angle_rot
 ),
 y = 1,
 lwd = 5, 
@@ -607,7 +624,7 @@ arrows.circular(x = circular(x = mu,
                              template = 'geographics',
                              modulo = '2pi',
                              zero = pi/2,
-                             rotation = 'clock'
+                             rotation = angle_rot
                             ),
                             y = A1(kappa),
                 col = 'black',
@@ -621,11 +638,11 @@ with(ml_diff,
      {
 arrows.circular(x = circular(x = mu, 
                              type = 'angles',
-                             unit = 'degrees',
+                             unit = angle_unit,
                              template = 'geographics',
                              modulo = '2pi',
                              zero = pi/2,
-                             rotation = 'clock'
+                             rotation = angle_rot
                             ),
                             y = A1(kappa),
                 col = 'orange3',
@@ -639,7 +656,8 @@ lines.circular(x = circular(x = 90-
                               seq(from = max(sim_diffs_CI),
                                    to = min(sim_diffs_CI),
                                    length.out = 1e3),
-                            units = angle_unit),  
+                            units = angle_unit, 
+                            rotation = angle_rot),  
                y = rep(x = 1-1.05,times = 1e3),
                col = 'orange3', 
                lwd = 5,
@@ -673,7 +691,8 @@ legend(x = 'bottom',
 #                      col = 'orange', 
 #                      lwd = 1)
 #        arrows.circular(x = circular(x = 90 -rep(x = ml_diff$mu,times = 2),
-#                                     units = angle_unit),
+#                                     units = angle_unit,
+#                                     rotation = angle_rot),
 #                        y = A1(kappa.ci),
 #                        code = 3,
 #                        angle = 90,
@@ -858,7 +877,9 @@ message(
       '\nestimated difference\n',
       if(!paired_data)
       {
-      round(diff(circular(x = sapply(ml_sample_mean,Exmu), units = angle_unit)),3) 
+      round(diff(circular(x = sapply(ml_sample_mean,Exmu), 
+                          units = angle_unit,
+                          rotation = angle_rot)),3) 
       }else
       {
        Exmu(ml_diff)
