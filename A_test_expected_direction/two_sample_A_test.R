@@ -23,6 +23,10 @@ graphics.off()
 #               In: Circular Statistics in Biology
 #               Academic Press (London)
 #
+#               Woolf, B. (1957). 
+#               THE LOG LIKELIHOOD RATIO TEST (THE G‐TEST).
+#               Annals of Human Genetics 21, 397–409.
+#
 #    EXAMPLES:  Fill out user input (lines 50-55), then press ctrl+shift+s to run
 #
 # 
@@ -39,7 +43,7 @@ graphics.off()
 #- V-test on grand mean + 
 #- Simplify to test of differences +
 #- Rotation direction option (needed for plots) +
-#- Troubleshoot plotting direction
+#- Troubleshoot plotting direction  +
 #- Tie-breaking approach
 #- Comment in detail
 #- Optimisation method for pairs (ML too biased?)
