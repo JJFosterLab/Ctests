@@ -20,6 +20,14 @@ graphics.off()
 #               In: Circular Statistics in Biology
 #               Academic Press (London)
 #
+#               Aneshansley DJ & Larkin TS (1981). 
+#               V-test is not a statistical test of “homeward direction.” 
+#                Nature 293, 239–239.
+#
+#               Woolf, B. (1957). 
+#               THE LOG LIKELIHOOD RATIO TEST (THE G‐TEST).
+#               Annals of Human Genetics 21, 397–409.
+#
 #    EXAMPLES:  Fill out user input (lines 50-55), then press ctrl+shift+s to run
 #
 # 
