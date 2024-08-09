@@ -217,7 +217,10 @@ ll_expect_mean = with(ml_ex,
 )
 
 # Just to confirm the V-test, what is the likelihood of a uniform distribution?
-ll_uniform = sum(log(dcircularuniform(x = cangs)) #return log probability
+ll_uniform = sum(dvonmises(x = cangs, # probability density for each observed angle
+                                mu = 0, #expected mean
+                                kappa = 0, # ML estimated concentration
+                                log = TRUE) #return log probability
                       )
 
 # Add the two distributions to the figure

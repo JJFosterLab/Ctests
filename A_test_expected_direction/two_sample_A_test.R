@@ -446,9 +446,12 @@ if(!paired_data)
   
   # Just to confirm the V-test, what is the likelihood of a uniform distribution?
   ll_uniform = with(adata,
-                    sum(log(dcircularuniform(x = circular(x = c(angle_1, angle_2),
-                                                     units = angle_unit,
-                                                     rotation = angle_rot))), #return log probability
+                    sum(dvonmises(x = circular(adata$angle_2,
+                                               units = angle_unit,
+                                               rotation = angle_rot), # probability density for each observed angle
+                                  mu = 0, # ML estimated mean
+                                  kappa = 0, # ML estimated concentration
+                                  log = TRUE), #return log probability
                         na.rm = TRUE
                         )
   )
