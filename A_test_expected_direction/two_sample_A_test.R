@@ -80,7 +80,7 @@ paired_data = TRUE # Are the data in the two columns paired (each from the same 
 csv_sep = ','#Is the csv comma separated or semicolon separated? For tab sep, use "\t"
 angle_name = "angles" #The title of the column with angles; NO SPACES PLEASE
 angle_unit = "degrees" # "degrees" or "radians"
-angle_rot = "counter" # "clock" or "counter"
+angle_rot = "clock" # "clock" or "counter"
 
 #Check the operating system and assign a logical flag (T or F)
 sys_win <- Sys.info()[['sysname']] == 'Windows'
@@ -95,6 +95,7 @@ if(sys_win){
   # # Simulate data (not used) ------------------------------------------------
   # n_angles = 44
   # # minimum discriminable angle appears to be approx 35°
+  # mu_offset = rad(35)
   # kappa_both = A1inv(0.7) #concentration around each trial mean
   # logkappa_var = 1.0 #scale of random variation in concentration (log units)
   # if(paired_data)
@@ -139,7 +140,7 @@ if(sys_win){
   #                              kappa = exp(log(kappa_both) + rnorm(n = 1, sd = logkappa_var))
   #                    )
   #                  ),
-  #                  circular(x = rep(x = NA, times = n_angles - n_angles2), 
+  #                  circular(x = rep(x = NA, times = n_angles - n_angles2),
   #                          units = angle_unit) #convert to angles and round to nearest degree
   #                  ) )
   #                 )
@@ -656,14 +657,15 @@ arrows.circular(x = circular(x = mu,
      }
 )
 #plot the simulated confidence interval for the ML mean
-lines.circular(x = circular(x = 90-
+lines.circular(x = circular(x = 
                               seq(from = max(sim_diffs_CI),
                                    to = min(sim_diffs_CI),
                                    length.out = 1e3),
+                            zero = pi/2,
                             units = angle_unit, 
                             rotation = angle_rot),  
                y = rep(x = 1-1.05,times = 1e3),
-               col = 'orange3', 
+               col = 'orange3',
                lwd = 5,
                lend = 'butt')
 
