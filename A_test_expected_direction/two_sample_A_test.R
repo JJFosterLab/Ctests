@@ -449,7 +449,7 @@ if(!paired_data)
                     sum(dvonmises(x = circular(adata$angle_2,
                                                units = angle_unit,
                                                rotation = angle_rot), # probability density for each observed angle
-                                  mu = 0, # ML estimated mean
+                                  mu = circular(0,template = 'none'), # ML estimated mean
                                   kappa = 0, # ML estimated concentration
                                   log = TRUE), #return log probability
                         na.rm = TRUE
