@@ -136,7 +136,7 @@ plot.circular(x = circular(x = adata$angle,
 ),
 stack = TRUE,
 bins = 360/5,
-sep = 0.05
+sep = 0.5/dim(adata)[1], # better spacing?
 )
 arrows.circular(x = circular(x = expected_mean_angle, 
                              type = 'angles',
