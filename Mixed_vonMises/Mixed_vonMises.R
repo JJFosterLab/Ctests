@@ -2,7 +2,7 @@
 graphics.off()
 # Details ---------------------------------------------------------------
 #       AUTHOR:	James Foster              DATE: 2023 08 09
-#     MODIFIED:	James Foster              DATE: 2023 08 09
+#     MODIFIED:	James Foster              DATE: 2024 10 16
 #
 #  DESCRIPTION: Generates axial data and finds and plots the assumed
 #               means and mean vectors of a symmetrical axial distribution.
@@ -80,7 +80,7 @@ n_angles = 15
 #choose a random mean direction
 suppressWarnings( {mu1 = rcircularuniform(1) })
 #choose a mean vector length
-mvl1 = 0.72
+mvl1 = 0.73#0.72
 # N.B. for this sample size p = 0.05 for a mean vector length of:
 sqrt(-log(0.05)/n_angles)
 # [1] 0.3870228
@@ -212,6 +212,7 @@ sep = 0.05,
 col = point_col,
 xlim = c(-1,1)*1.2,# make space for plotting outside of the circle
 ylim = c(-1,1)*1.2,# make space for plotting outside of the circle
+main = '\nRayleigh test on doubled data (not recommended)'
 )
 arrows.circular(x = mu1+c(0, pi),
                 y = c(mvl1,mvl1),
@@ -257,9 +258,36 @@ cmle = circ_mle(angles_sim)
 est_kappa = cmle$results$k1[1]
 est_mean = cmle$results$q1[1]
 est_prop = cmle$results$lamda[1]
-A1(cmle$results$k1[1])
+A1(cmle$results$k1[1])#estimated mean vector length 
+mvl1#resembles simulated mlv
 
+# . Some hypothesis tests -------------------------------------------------
+cmle$bestmodel#a bimodal model
+rs = cmle$results#the results of all fitted models
+#likelihood ratio test for uniformity
+lr_uniform = lr_test(data = angles_sim,
+        null_model =  'M1',#a uniform distribution
+        alt_model = cmle$bestmodel)#whatever model fits best
+names(lr_uniform) = c('h0', 'h1', 'chisq', 'df', 'p')
+data.frame(lr_uniform)
+#   h0  h1    chisq df           p
+# 1 M2A M4A 9.458311  1 0.002101945
+#likelihood ratio test for bimodality (vs unimodality)
+lr_unimodal = lr_test(data = angles_sim,
+        null_model =  'M2A',#a uni- _modal_ distribution
+        alt_model = 'M4A')#a flexible bimodal (check cmle$results for which bimodal models are good fits)
+names(lr_unimodal) = c('h0', 'h1', 'chisq', 'df', 'p')
+data.frame(lr_unimodal)
+#   h0  h1    chisq df           p
+# 1 M2A M4A 9.458311  1 0.002101945
 
+#if M3A is cmle$bestmodel, then both models have the same number of parameters
+#we should instead compare their AIC
+aic_unimodal = rs['M2A', 'AIC']
+aic_bimodal = rs['M3A', 'AIC']
+if(aic_unimodal - aic_bimodal > 2) #we expect a difference in AIC >2 (1 log unit greater likelihood)
+{message('\ndata bimodally distributed')}else
+{message('\ndata unimodally distributed')}
 
 plot.circular(x = circular(x = deg(angles_sim), 
                            type = 'angles',
@@ -274,6 +302,7 @@ sep = 0.05,
 col = point_col,
 xlim = c(-1,1)*1.2,# make space for plotting outside of the circle
 ylim = c(-1,1)*1.2,# make space for plotting outside of the circle
+main = '\nMaximum likelihood model (recommended)'
 )
 arrows.circular(x = mu1+c(0, pi),
                 y = c(mvl1,mvl1),
