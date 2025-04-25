@@ -2,7 +2,7 @@
 graphics.off()
 # Details ---------------------------------------------------------------
 #       AUTHOR:	James Foster              DATE: 2023 06 09
-#     MODIFIED:	James Foster              DATE: 2024 08 19
+#     MODIFIED:	James Foster              DATE: 2025 03 04
 #
 #  DESCRIPTION: Loads a text file and performs an "inverse" V test for directedness 
 #               towards an expected mean angle. Could be called an "A" test.
