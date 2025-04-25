@@ -33,6 +33,14 @@
 #    EXAMPLES:  Run section by section
 #
 # 
+#TODO   ---------------------------------------------
+#TODO   
+#- Test with simulated data +
+#- Fix plotting
+#- Read in data   
+#- Perform test    
+#- Save results 
+#- Comment in detail
 
 # seed random number generator for reproducibility ------------------------
 set.seed(20171101)#publication date of Fitak & Johnsen 2017
@@ -79,6 +87,7 @@ suppressMessages(#these are disturbing users unnecessarily
 n_angles = 20
 #choose a random mean direction
 suppressWarnings( {mu1 = rcircularuniform(1) })
+# mu1 = circular(0, template ='none')
 #choose a mean vector length
 mvl1 = 0.6 #quite oriented
 #for reference the standard deviation should be nearly 60°
@@ -430,7 +439,7 @@ arrows.circular(x = circular(x = c(expected_mean, expected_mean),
 )
 
 #plot the maximum likelihood mean direction and mean vector
-arrows.circular(x = circular(x = params_mle[1],
+arrows.circular(x = pi/2 -circular(x = params_mle[1],
                               type = 'angles',
                               unit = 'degrees',
                               modulo = '2pi',
