@@ -2,7 +2,7 @@
 graphics.off()
 # Details ---------------------------------------------------------------
 #       AUTHOR:	James Foster              DATE: 2023 06 09
-#     MODIFIED:	James Foster              DATE: 2023 06 09
+#     MODIFIED:	James Foster              DATE: 2025 03 04
 #
 #  DESCRIPTION: Loads a text file and performs an "inverse" V test for directedness 
 #               towards an expected mean angle. Could be called an "A" test.
@@ -136,7 +136,7 @@ plot.circular(x = circular(x = adata$angle,
 ),
 stack = TRUE,
 bins = 360/5,
-sep = 0.05
+sep = 0.5/dim(adata)[1], # better spacing?
 )
 arrows.circular(x = circular(x = expected_mean_angle, 
                              type = 'angles',
@@ -308,7 +308,10 @@ print(data.frame(chi_squared = round(lr_stat, 3),
         p = round(pLR, 4),
         h2 = if(pLR <0.05)
           {'the sample mean differs significantly from the expected mean'}else
-          {'the sample mean _does not_ differ significantly from the expected mean'})
+          {'the sample mean _does not_ differ significantly from the expected mean'},
+        h1_LogLikelihood = ll_expect_mean, # give the user more insight into the test
+        h2_LogLikelihood = ll_sample_mean
+        )
       )
 
 # Save result -------------------------------------------------------------
