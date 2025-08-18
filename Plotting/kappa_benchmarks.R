@@ -78,6 +78,7 @@ CI_vM = function(angles, #vector of angles fitted (used for sample size)
                  m2 = NA, #secondary mean (ignored if NULL or NA)
                  k2 = NA, #secondary kappa
                  w1 = 1, #weighting of primary mean
+                 force_mu = FALSE, #force median at true mu?
                  n = 1e4, #number of simulations
                  au = 'degrees', 
                  ar = 'clock',
@@ -188,12 +189,21 @@ CI_vM = function(angles, #vector of angles fitted (used for sample size)
       )
       if(is.na(m2))
       {
+        if(force_mu)
+        {
+          Mod360.180(
+            quantile( Mod360.180(as.numeric(m1_est) - m1),
+                              probs = probs1) + m1
+          )
+        }else
+        {
         Mod360.180(
           quantile.circular(x = circular(x = m1_est,
                                          units = au,
                                          rotation = ar),
                             probs = probs1)
         )
+        }
       }else
       {
         probs2 = switch(alternative,
@@ -209,18 +219,36 @@ CI_vM = function(angles, #vector of angles fitted (used for sample size)
                                  {c(0,-1)}
                                  )*(1-interval), 0.5))
         )
-        list(m1 = Mod360.180(
-          quantile.circular(x = circular(x = m1_est,
-                                         units = au,
-                                         rotation = ar),
-                            probs = probs1)
-        ),
-        m2 = Mod360.180(
-          quantile.circular(x = circular(x = m2_est,
-                                         units = au,
-                                         rotation = ar),
-                            probs = probs2)
-        )
+        list(m1 = if(force_mu)
+            {
+              Mod360.180(
+                quantile( Mod360.180(as.numeric(m1_est) - m1),
+                          probs = probs1) + m1
+              )
+            }else
+            {
+              Mod360.180(
+                quantile.circular(x = circular(x = m1_est,
+                                               units = au,
+                                               rotation = ar),
+                                  probs = probs1)
+              )
+              },
+        m2 = if(force_mu)
+            {
+              Mod360.180(
+                quantile( Mod360.180(as.numeric(m2_est) - m2),
+                          probs = probs2) + m2
+              )
+            }else
+            {
+              Mod360.180(
+                quantile.circular(x = circular(x = m2_est,
+                                               units = au,
+                                               rotation = ar),
+                                  probs = probs2)
+              )
+            }
         )
       }
     }else
@@ -342,7 +370,7 @@ sn_small = parallel::parSapply(X = kk_small, FUN = NormalSD, n = 1e4,
 # Calculate discrete benchmarks -------------------------------------------
 
 #Discrete sequence of benchmarks 
-kd = c(0,  c(0.3, 0.5, 1.0) %*% t(10^c(0:2)) )
+kd = c(0, 0.1,  c(0.3, 0.5, 1.0) %*% t(10^c(0:2)) )
 #mean vector lengths
 rd = round(A1(kd), 3)
 #Mardia SD
@@ -420,7 +448,7 @@ lines(x = kk_small,
       lend = 'butt')
 
 
-# comparison of Mardia SD and Gaussian SD -----
+# Comparison of Mardia SD and Gaussian SD -----
 par(mar = c(1,1,0,0)*4.0)
 plot(x = NULL,
      xlab = 'normal SD',
@@ -529,7 +557,7 @@ axis(side = 2,
 axis(1, col = col_rho)
 
 
-# plot benchmarks -----
+# Plot benchmarks -----
 #for rho
 par(mar = c(1,1,0,0)*4.0)
 #set up plot
@@ -766,13 +794,14 @@ DescriptCplot = function(k,
   #                lwd = lw)
     #add CI of the mean
     #calculate vector of estimates
-    civ = CI_vM(angles = cd,
-                m1 = cm,
-                k1 = k,
-                alternative = 'two.sided')
-    #plot quantiles of estimates
-    PlotCI_vM(ci_vec = civ,
-              col = cicol, lwd = lw,
+  civ = CI_vM(angles = cd,
+              m1 = cm,
+              k1 = k,
+              alternative = 'two.sided',
+              force_mu = if(k == 0 ){TRUE}else{FALSE})
+  #plot quantiles of estimates
+  PlotCI_vM(ci_vec = civ,
+            col = cicol, lwd = lw,
               radius = 1+5*sep*shrink)
   #add a title
   mtext(text = paste0('κ = ', k),
@@ -803,10 +832,10 @@ legend(x = 'left',
                   'mean vector',
                   '95% CI of the mean',
                   'mean ± SD'),
-       col = c('pink3',
-               'darkblue',
-               'blue3',
-               'blue3',
+       col = c(col_pdf,
+               col_obs,
+               col_rho,
+               col_rho,
                col_sd
                ),
        lty = c(1,
