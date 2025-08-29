@@ -2,7 +2,7 @@
 graphics.off()
 # Details ---------------------------------------------------------------
 #       AUTHOR:	James Foster              DATE: 2025 08 28
-#     MODIFIED:	James Foster              DATE: 2025 08 28
+#     MODIFIED:	James Foster              DATE: 2025 08 29
 #
 #  DESCRIPTION: Plot example structures of circular dataset
 #               
@@ -24,10 +24,14 @@ graphics.off()
 # 
 #TODO   ---------------------------------------------
 #TODO   
-#- Example homeward direction plot
-#- Example concentration change plot
-#- Example individual headings plot correlated
-#- Example individual headings plot uncorrelated
+#- Example homeward direction plot  +
+#- Example concentration change plot  +
+#- Example individual headings plot correlated  +
+#- Example individual headings plot uncorrelated  +
+#- Example individual headings and concentration  +
+#- Example of individual change in heading
+
+set.seed(0120810506)#ISBN Batschelet, 1981
 
 
 # Set up plot colours
@@ -535,7 +539,23 @@ PCfun = function(angles,
 }
 
 
+#invert the softplus link
+#https://en.wikipedia.org/wiki/Softplus
+#we are using this as our _inverse_ link function for kappa,
+#maps almost 1:1 but keeps values >0 for low estimates
+softplus = function(x)
+{
+  log(exp(x)+1) 
+}
+#this would return our kappa estimates back to the original scale
+inv_softplus = function(x)
+{
+  log(exp(x)-1) 
+}
+
+
 # Simulate divergence from home direction -------------------------------------------
+set.seed(0120810506)#ISBN Batschelet, 1981
 
 par(pty = 's')
 par(mar = c(0,0,0,0))
@@ -548,6 +568,7 @@ DescriptCplot(m = -15,
               denscol = NA)
 
 # Simulate reduced concentration -------------------------------------------
+set.seed(0120810506)#ISBN Batschelet, 1981
 
 par(pty = 's')
 par(mar = c(0,0,0,0))
@@ -578,6 +599,7 @@ lines(x = c(0,0),
 
 
 # Simulate datasets with low interindiv correlation ---------------------------------------
+set.seed(0120810506)#ISBN Batschelet, 1981
 kappa_mu = 0.1
 kappa_id = 5.0
 
@@ -647,5 +669,91 @@ arrows.circular(x = circular(mu,
 )
 PlotCI_vM(ci_vec = ci_comb2,
           col = col_pdf)
-# rayleigh.test(dt_comb)
+rayleigh.test(dt_comb2)
+rayleigh.test(dt_comb2[1+0:9 * 20])
 
+# Simulate dataset with €variable individual parametes ---------------------------------------
+set.seed(0120810506)#ISBN Batschelet, 1981
+kappa_mu_var = 1.0
+kappa_var_mean = 1.5
+kappa_var_sd = 2.0
+kappa_id_var = rnorm(n = ndata,
+                     mean = kappa_var_mean,
+                     sd = kappa_var_sd)
+#rectified
+kappa_id_var[kappa_id_var<0] = 0
+
+# list of circular datasets
+dt_var = rvonmises(n = ndata,
+                mu = c0,
+                kappa = kappa_mu_var)
+
+par(pty = 's')
+par(mar = c(0,0,0,0))
+par(mfrow = c(3,4))
+dt_id_var = mapply(m = dt_var, 
+                   k = round(kappa_id_var,2), 
+       FUN = DescriptCplot,
+       save_sample = TRUE,
+       ndata = 20,
+       refline = 0,
+       sdcol = NA,
+       denscol = NA,
+       SIMPLIFY = FALSE)
+#Add the population of biases
+DescriptCplot(k = kappa_mu_var,
+              ndata = ndata,
+              refline = 0,
+              sdcol = NA,
+              denscol = NA,
+              pcol = NA,
+              cicol = col_sd,
+              mvcol = col_sd
+              )
+points.circular(dt_var,
+                bins = 360/5-1,
+                stack = TRUE,
+                sep = 0.05,
+                shrink = 1.25,
+                col = col_rho
+)
+mean_kappa_id_var = softplus(mean(inv_softplus(kappa_id_var)))
+#Add decription of the average individual
+DescriptCplot(k = kappa_var_mean,
+              ndata = ndata,
+              refline = 0,
+              sdcol = NA,
+              denscol = NA,
+              pcol = NA,
+              cicol = col_rho,
+              mvcol = col_rho
+              )
+kappa_id_var_ci = kappa_var_mean + 
+                    kappa_var_sd * 
+                      qnorm(c(0,1) + c(1,-1)*0.05/2)
+#rectify
+kappa_id_var_ci[kappa_id_var_ci<0] = 0
+
+
+arrows(x0 = sin(c0),
+       x1 = sin(c0),
+       y0 = A1(kappa_id_var_ci[1]),
+       y1 = A1(kappa_id_var_ci[2]),
+       lwd = 7,
+       col = adjustcolor(col = col_sd2,
+                        alpha.f = 100/255),
+       length = 0.05,
+       angle = 90,
+       code = 3,
+       lend = 'butt'
+       )
+mtext(text = paste0('(',paste(signif(kappa_id_var_ci, 2), collapse = ' '), ')'),
+      side = 1,
+      line = -1)
+#v-test is not significant (or Rayleigh test)
+rayleigh.test(dt_var, mu = c0)
+rt_lst = lapply(X = lapply(dt_id_var, circular, units = 'degrees'),
+                 FUN = rayleigh.test)
+rt_lst_print = do.call(what = rbind, 
+                       args = rt_lst)
+print(rt_lst_print)
