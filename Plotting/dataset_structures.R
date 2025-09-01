@@ -384,6 +384,7 @@ DescriptCplot = function(k,
                          shrink = 1.25,
                          refline = NA,
                          save_sample = FALSE,
+                         seed = 20250815,
                          ...#passed to points.circular
 )
 {
@@ -393,7 +394,7 @@ DescriptCplot = function(k,
                 rotation = 'clock',
                 zero = pi/2)
   #kappa = 0 v. random, make repeatable
-  set.seed(20250815)
+  set.seed(seed)
   #generate dataset
   cd = rvonmises(mu = cm,
                  kappa = k,
@@ -560,12 +561,22 @@ set.seed(0120810506)#ISBN Batschelet, 1981
 par(pty = 's')
 par(mar = c(0,0,0,0))
 
-DescriptCplot(m = -15,
+cd_divergence = DescriptCplot(m = -15,
               k = 10,
               refline = 0, 
               ndata = 20,
               sdcol = NA,
-              denscol = NA)
+              denscol = NA,
+              save_sample = TRUE)
+
+# circular zero
+c0 = circular(x = 0,
+              units = 'degrees',
+              rotation = 'clock',
+              zero = pi/2)
+
+#v-test finds significant orientation in 0°, but we know the true direction is different
+rayleigh.test(cd_divergence, mu = c0)
 
 # Simulate reduced concentration -------------------------------------------
 set.seed(0120810506)#ISBN Batschelet, 1981
@@ -574,22 +585,24 @@ par(pty = 's')
 par(mar = c(0,0,0,0))
 par(mfrow = c(1,2))
 
-DescriptCplot(m = 0,
+cd_3 = DescriptCplot(m = 0,
               k = 3,
               ndata = 20,
               sdcol = NA,
-              denscol = NA)
+              denscol = NA,
+              save_sample = TRUE)
 lines(x = c(0,0),
       y = c(0,1),
       col = adjustcolor(col = 'gray', 
                         alpha.f = 150/255),
       lwd = 3,
       lend = 'butt')
-DescriptCplot(m = 0,
+cd_0.5 = DescriptCplot(m = 0,
               k = 0.5,
               ndata = 20,
               sdcol = NA,
-              denscol = NA)
+              denscol = NA,
+              save_sample = TRUE)
 lines(x = c(0,0),
       y = c(0,1),
       col = adjustcolor(col = 'gray', 
@@ -597,6 +610,7 @@ lines(x = c(0,0),
       lwd = 3,
       lend = 'butt')
 
+watson.two.test(cd_3, cd_0.5)#no difference detected
 
 # Simulate datasets with low interindiv correlation ---------------------------------------
 set.seed(0120810506)#ISBN Batschelet, 1981
@@ -604,11 +618,7 @@ kappa_mu = 0.1
 kappa_id = 5.0
 
 ndata = 10 # moderate sample size
-# list of circular datasets
-c0 = circular(x = 0,
-              units = 'degrees',
-              rotation = 'clock',
-              zero = pi/2)
+
 dt2 = rvonmises(n = 10,
                 mu = c0,
                 kappa = kappa_mu)
@@ -672,7 +682,7 @@ PlotCI_vM(ci_vec = ci_comb2,
 rayleigh.test(dt_comb2)
 rayleigh.test(dt_comb2[1+0:9 * 20])
 
-# Simulate dataset with €variable individual parametes ---------------------------------------
+# Simulate dataset with variable individual parameters ---------------------------------------
 set.seed(0120810506)#ISBN Batschelet, 1981
 kappa_mu_var = 1.0
 kappa_var_mean = 1.5
@@ -757,3 +767,236 @@ rt_lst = lapply(X = lapply(dt_id_var, circular, units = 'degrees'),
 rt_lst_print = do.call(what = rbind, 
                        args = rt_lst)
 print(rt_lst_print)
+
+
+# Individual heading changes parameters ---------------------------------------
+#condition level change in heading of 30°
+delta_mu = circular(x = 30,
+                    units = 'degrees',
+                    rotation = 'clock',
+                    zero = pi/2)
+#individual differences with kappa = 3
+kappa_mu_hd = 4.0
+#mean individual highly concentrated
+kappa_hd_mean = 3.0
+#large variance in individual accuracy
+kappa_hd_sd = 2.5
+set.seed(0120810506)#ISBN Batschelet, 1981
+kappa_id_hd = rnorm(n = ndata/2,
+                     mean = kappa_hd_mean,
+                     sd = kappa_hd_sd)
+#rectified
+kappa_id_hd[kappa_id_hd<0] = 0
+
+# list of circular datasets
+set.seed(0120810506)#ISBN Batschelet, 1981
+dt_hd = rvonmises(n = ndata/2,
+                   mu = c0,
+                   kappa = kappa_mu_hd)
+
+dt_delta = rvonmises(n = ndata/2,
+                   mu = c0+delta_mu,
+                   kappa = kappa_mu_hd)
+
+
+
+par(pty = 's')
+par(mar = c(0,0,0,0))
+par(mfrow = c(3,5))
+#before turn
+dt_id_hd = mapply(m = dt_hd, 
+                   k = round(kappa_id_hd,2), 
+                   FUN = DescriptCplot,
+                   save_sample = TRUE,
+                   ndata = 20,
+                   refline = 0,
+                   sdcol = NA,
+                   denscol = NA,
+                   seed = 0120810506, #ISBN Batschelet, 1981
+                   SIMPLIFY = FALSE)
+#after turn
+dt_id_delta = mapply(m = dt_delta, 
+                   k = round(kappa_id_hd,2), 
+                   FUN = DescriptCplot,
+                   save_sample = TRUE,
+                   pcol = 'darkgreen',
+                   ndata = 20,
+                   refline = 0,
+                   sdcol = NA,
+                   denscol = NA,
+                   seed = 1981,#Publication year Batschelet
+                   SIMPLIFY = FALSE)
+
+#Add the population of biases
+DescriptCplot(m = delta_mu,
+              k = kappa_mu_hd,
+              ndata = ndata,
+              refline = 0,
+              sdcol = NA,
+              denscol = NA,
+              pcol = NA,
+              cicol = col_sd,
+              mvcol = col_sd
+)
+points.circular(dt_delta,
+                bins = 360/5-1,
+                stack = TRUE,
+                sep = 0.05,
+                shrink = 1.25,
+                col = col_rho
+)
+ci_delta_mu = CI_vM(angles = dt_delta,
+                        m1 = delta_mu,
+                        k1 = kappa_mu_hd,
+                        alternative = 'two.sided')
+mtext(text = paste0('(',paste(signif(ci_delta_mu[-2], 2), collapse = ' '), ')'),
+      side = 1,
+      line = -1)
+
+#Add decription of the average individual
+DescriptCplot(k = kappa_hd_mean,
+              ndata = ndata/2,
+              refline = 0,
+              sdcol = NA,
+              denscol = NA,
+              pcol = NA,
+              cicol = col_rho,
+              mvcol = col_rho
+)
+kappa_id_hd_ci = kappa_hd_mean + 
+  kappa_hd_sd * 
+  qnorm(c(0,1) + c(1,-1)*0.05/2)
+#rectify
+kappa_id_hd_ci[kappa_id_hd_ci<0] = 0
+
+
+arrows(x0 = sin(c0),
+       x1 = sin(c0),
+       y0 = A1(kappa_id_hd_ci[1]),
+       y1 = A1(kappa_id_hd_ci[2]),
+       lwd = 7,
+       col = adjustcolor(col = col_sd2,
+                         alpha.f = 100/255),
+       length = 0.05,
+       angle = 90,
+       code = 3,
+       lend = 'butt'
+)
+mtext(text = paste0('(',paste(signif(kappa_id_hd_ci, 2), collapse = ' '), ')'),
+      side = 1,
+      line = -1)
+
+
+dt_comb_hd = do.call(what = c,
+                   args = dt_id_hd)
+PCfun(angles = dt_comb_hd,
+      col = 'gray25',
+      shrink = 3.0)
+mle_comb_hd = mle.vonmises(x = dt_comb_hd,bias = TRUE)
+ci_comb_hd = with(mle_comb_hd,
+                CI_vM(angles = dt_comb_hd,
+                      m1 = mu,
+                      k1 = kappa,
+                      alternative = 'two.sided')
+)
+with(mle_comb_hd,
+     {
+       arrows.circular(x = circular(mu,
+                                    units = 'degrees',
+                                    rotation = 'clock',
+                                    zero = pi/2),
+                       y = A1(kappa),
+                       lwd = 3,
+                       col = col_pdf,
+                       length = 0.1
+       )
+     }
+)
+PlotCI_vM(ci_vec = ci_comb_hd,
+          col = col_pdf)
+
+dt_comb_delta = do.call(what = c,
+                   args = dt_id_delta)
+PCfun(angles = dt_comb_delta,
+      col = 'darkslategray',
+      shrink = 3.0)
+mle_comb_delta = mle.vonmises(x = dt_comb_delta,bias = TRUE)
+ci_comb_delta = with(mle_comb_delta,
+                CI_vM(angles = dt_comb_delta,
+                      m1 = mu,
+                      k1 = kappa,
+                      alternative = 'two.sided')
+)
+with(mle_comb_delta,
+     {
+       arrows.circular(x = circular(mu,
+                                    units = 'degrees',
+                                    rotation = 'clock',
+                                    zero = pi/2),
+                       y = A1(kappa),
+                       lwd = 3,
+                       col = col_pdf,
+                       length = 0.1
+       )
+     }
+)
+PlotCI_vM(ci_vec = ci_comb_delta,
+          col = col_pdf)
+
+# dt_comb_diffs = sample(x = dt_comb_delta,
+#                        size = length(dt_comb_delta),
+#                        replace = FALSE)
+
+dt_comb_diffs = dt_comb_delta - dt_comb_hd
+
+PCfun(angles = dt_comb_diffs,
+      col = col_sd2,
+      shrink = 3.0)
+mle_comb_diffs = mle.vonmises(x = dt_comb_diffs,bias = TRUE)
+ci_comb_diffs = with(mle_comb_diffs,
+                     CI_vM(angles = dt_comb_diffs,
+                           m1 = mu,
+                           k1 = kappa,
+                           alternative = 'two.sided')
+)
+with(mle_comb_diffs,
+     {
+       arrows.circular(x = circular(mu,
+                                    units = 'degrees',
+                                    rotation = 'clock',
+                                    zero = pi/2),
+                       y = A1(kappa),
+                       lwd = 3,
+                       col = col_sd,
+                       length = 0.1
+       )
+     }
+)
+PlotCI_vM(ci_vec = ci_comb_diffs,
+          col = col_sd)
+mtext(text = paste0('(',paste(signif(ci_comb_diffs[-2], 2), collapse = ' '), ')'),
+      side = 1,
+      line = -1)
+#high density around true mean
+rayleigh.test(dt_comb_diffs, mu = delta_mu)
+#but also elsewhere
+rayleigh.test(dt_comb_diffs, mu = c0)
+#
+#There is a difference between the distributions
+watson.two.test(dt_comb_hd, dt_comb_delta)
+#best accounted for at an individual level
+mww_data = data.frame(a = c(dt_comb_hd, dt_comb_delta),
+                      ID = c(sort(rep(1:(ndata/2), 20)),
+                             sort(rep(1:(ndata/2), 20))),
+                      condition = sort(rep(1:2, 20*ndata/2))
+)
+watson.wheeler.test( a ~ condition*ID,
+                     data = mww_data
+                    )
+#but what is driving it?
+watson.wheeler.test( a ~ condition*ID,
+                     data = within(mww_data,
+                                 {a[condition == 2] = a[condition == 2]-30}
+                                 )
+)
+#detected even after removing the effect of condition!
