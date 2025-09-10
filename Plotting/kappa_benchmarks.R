@@ -855,3 +855,77 @@ legend(x = 'left',
        )
 
 
+# Effect of kappa on PD at 0° ---------------------------------------------
+
+P0by5deg = function(k, interval = 10)
+{
+  diff(
+    pvonmises(q = circular(c(-1, 1)*0.5*interval, #the interval around the mean
+                           units = 'degrees'),
+              mu = circular(0, 
+                            units = 'degrees'),
+              kappa = k
+    )
+    )
+}
+
+intrvl = 10
+# pd0 = sapply(X = kd,
+#              FUN = dvonmises,
+#              x = circular(0, template = 'none'),
+#              mu = circular(0, template = 'none'))
+
+p0b5 = sapply(X = kd,
+             FUN = P0by5deg,
+             interval = 10)
+pp = sapply(X = kk,
+             FUN = P0by5deg,
+            interval = 10)
+
+
+par(mfrow = c(1,1),
+    mar = c(4,4,0,0))
+plot(x = kk,
+     y = pp,
+     ylab = paste0('p(0°±',intrvl/2,'°)'),
+     xlab = 'κ',
+     ylim = c(0,1)*1.0,
+     xlim = c(0.01,100),
+     col = col_pdf,
+     log = 'x',
+     type = 'l',
+     lwd = 5,
+     axes = F)
+
+segments(x0 = kd,
+         y0 = rep(0, length(kd)),
+         y1 = p0b5,
+         col = col_pdf,
+         lty = 3)
+segments(x0 = rep(0.007, length(kd)),
+         x1 = kd,
+         y0 = p0b5,
+         col = col_pdf,
+         lty = 3)
+text(x = exp(log(kd)+0.01),
+     y = p0b5+0.01,
+     labels = paste0(round(p0b5, 3)),
+     col = col_pdf,
+     adj = c(1,0),
+     cex = 0.7
+)
+
+axis(side = 2, col = col_pdf, lwd = 2)
+axis(side = 1,
+     at = c(0, c(1,5) %*% t(10^c(-2:2)) ),
+     labels = sapply(X = c(0, c(1,5) %*% t(10^c(-2:2)) ),
+                     FUN = paste0),
+     lwd = 2
+)
+abline(h = c(0,1),
+       v = 0,
+       lwd = 2)
+abline(h = intrvl/360,
+       lty = 2, 
+       col = 'gray',
+       lwd = 2)
