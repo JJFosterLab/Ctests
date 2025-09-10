@@ -2,7 +2,7 @@
 graphics.off()
 # Details ---------------------------------------------------------------
 #       AUTHOR:	James Foster              DATE: 2025 08 28
-#     MODIFIED:	James Foster              DATE: 2025 08 29
+#     MODIFIED:	James Foster              DATE: 2025 09 10
 #
 #  DESCRIPTION: Plot example structures of circular dataset
 #               
@@ -29,7 +29,9 @@ graphics.off()
 #- Example individual headings plot correlated  +
 #- Example individual headings plot uncorrelated  +
 #- Example individual headings and concentration  +
-#- Example of individual change in heading
+#- Example of individual change in heading +
+#- Add method for brms CI +
+#- Add brms CI to descriplot
 
 set.seed(0120810506)#ISBN Batschelet, 1981
 
@@ -47,6 +49,7 @@ col_obs = '#3E1F51'
 
 
 require(circular)
+require(brms)
 #function for estimating sd from kappa
 MardiaSD = function(k,
                     method = 'analytical',
@@ -554,8 +557,140 @@ inv_softplus = function(x)
   log(exp(x)-1) 
 }
 
+#function for credible interval of the intercept
+CI_unwrap = function(data,
+                formula = bf(y~1),
+                est_kappa = TRUE,
+                predictors = TRUE,
+                return_model = FALSE,
+                interval = 0.95,
+                prior = NULL,
+                ...#passed to brms
+                )
+{
+  if(is.null(prior))
+  {
+    if(predictors)
+    {
+    prior =  prior('normal(0,pi())', class = 'Intercept', dpar = 'mu') +
+              prior('normal(0,pi()/3)', class = 'b', dpar = 'mu') +
+              prior('normal(3,3)', class = 'Intercept', dpar = 'kappa')
+              prior('normal(0,3)', class = 'b', dpar = 'kappa')
+    }else{
+    prior =  prior('normal(0,pi())', class = 'Intercept', dpar = 'mu') +
+              prior('normal(3,3)', class = 'kappa')
+    }
+  }
+  #set up required inverse link
+  softplus = function(x)
+  {
+    log(exp(x)+1) 
+  }
+  #set up required Stan functions
+  mod_circular_fun = stanvar(scode = "
+    real mod_circular(real y) {
+      return fmod(y + pi(), 2*pi()) - pi();
+    }
+  ",
+                             block = 'functions')
+  unwrap_von_mises = custom_family(
+    "unwrap_von_mises", dpars = c("mu", "kappa"),
+    links = c('identity',#brms cannot accept custom link functions, do via nl instead
+              "softplus"), 
+    lb = c(-pi, 0), ub = c(pi, NA),
+    type = "real",
+  )
+  
+  stan_unwrap_fun = stanvar(scode = "
+    real unwrap_von_mises_lpdf(real y, real mu, real kappa) {
+      return von_mises_lpdf(y | mod_circular(mu), kappa);
+    }
+    real unwrap_von_mises_rng(real mu, real kappa) {
+      return von_mises_rng( mod_circular(mu) , kappa);
+    }
+  ",
+                            block = 'functions') 
+  
+  bmod = brm(formula = formula,
+           data = data,
+           family = unwrap_von_mises,
+           stanvars = stan_unwrap_fun + mod_circular_fun,
+           prior = prior,
+           ...
+           )
+  all_draws = as_draws_df(bmod)
+  # mu_draws = as_draws_df(bmod, 
+  #                        variable = 'Intercept',
+  #                        dpar = 'mu')
+  pbs =  c(0,0.5,1)+
+          c(1,0,-1)*
+          (1-interval)*0.5
+  mu_q = with(all_draws,
+              {
+              quantile.circular(x = circular(Intercept,
+                                    template = 'none'),
+                           probs = pbs)
+              }
+              )
+  if(predictors)
+  {
+    mux_q = with(all_draws,
+                 {
+                   quantile.circular(x = circular(Intercept+b_x,
+                                                  template = 'none'),
+                                     probs = pbs)
+                 }
+    )
+  }
+  
+  # kappa_draws = as_draws_df(bmod, 
+  #                           variable = 'kappa',
+  #                           regex = TRUE)
+  if(est_kappa)
+  {
+    if(predictors)
+    {
+    kappa_q = with(all_draws,
+                   {
+                   softplus(x = quantile(x = Intercept_kappa,
+                                        probs = pbs)
+                          )
+                   }
+                  )
+    kappax_q = with(all_draws,
+                 {
+                   quantile(x = softplus(Intercept_kappa + b_kappa_x),
+                                     probs = pbs)
+                 }
+    )
+    }else{
+    kappa_q = with(all_draws,
+                   {
+                   softplus(x = quantile(x = kappa,
+                                        probs = pbs)
+                          )
+                   }
+                  )
+    }
+  }
+  
+    if(predictors)
+    {
+    rlst = list(mu = mu_q,
+                 mu_x = mux_q)
+    rlst$kappa = if(est_kappa){kappa_q}else{NULL}
+    rlst$kappa_x = if(est_kappa){kappax_q}else{NULL}
+    rlst$model = if(return_model){bmod}else{NULL}
+    }else{
+    rlst = list(mu = mu_q)
+    rlst$kappa = if(est_kappa){kappa_q}else{NULL}
+    rlst$model = if(return_model){bmod}else{NULL}
+    }
+  return(rlst)
+}
 
-# Simulate divergence from home direction -------------------------------------------
+
+# Divergence from home direction -------------------------------------------
 set.seed(0120810506)#ISBN Batschelet, 1981
 
 par(pty = 's')
@@ -577,8 +712,48 @@ c0 = circular(x = 0,
 
 #v-test finds significant orientation in 0°, but we know the true direction is different
 rayleigh.test(cd_divergence, mu = c0)
-
-# Simulate reduced concentration -------------------------------------------
+ci_divergence = CI_vM(angles = cd_divergence,
+                    m1 = -15,
+                    k1 = 10,
+                    alternative = 'two.sided')
+mtext(text = paste0('(',paste(signif(ci_divergence[-2], 2), collapse = ' '), ')'),
+      side = 1,
+      line = -1)
+ci_uw = CI_unwrap(data = data.frame(y = rad(cd_divergence)), 
+             est_kappa = TRUE,
+             predictors = FALSE,
+             backend = 'cmdstan'#faster and more reliable
+             )
+PlotCI_vM(ci_vec = deg(ci_uw$mu),
+          col = adjustcolor('darkred', alpha.f = 100/255),
+          lwd = 7,
+          radius = 1.35)
+with(ci_uw,
+     arrows.circular(x = circular(mu[2],
+                                  rotation = 'clock',
+                                  zero = pi/2),
+                     y = A1(kappa[2]),
+                     lwd = 1,
+                     length = 0.05,
+                     col = 'darkred')
+     )
+with(ci_uw,
+     {
+arrows(x0 = sin(mu[2])*A1(kappa[1]),
+       x1 = sin(mu[2])*A1(kappa[3]),
+       y0 = cos(mu[2])*A1(kappa[1]),
+       y1 = cos(mu[2])*A1(kappa[3]),
+       lwd = 7,
+       col = adjustcolor(col = 'darkred',
+                         alpha.f = 100/255),
+       length = 0.05,
+       angle = 90,
+       code = 3,
+       lend = 'butt'
+      )
+     }
+)
+# Reduced concentration -------------------------------------------
 set.seed(0120810506)#ISBN Batschelet, 1981
 
 par(pty = 's')
@@ -590,29 +765,176 @@ cd_3 = DescriptCplot(m = 0,
               ndata = 20,
               sdcol = NA,
               denscol = NA,
+              refline = c0,
               save_sample = TRUE)
-lines(x = c(0,0),
-      y = c(0,1),
-      col = adjustcolor(col = 'gray', 
-                        alpha.f = 150/255),
-      lwd = 3,
-      lend = 'butt')
+# lines(x = c(0,0),
+#       y = c(0,1),
+#       col = adjustcolor(col = 'gray', 
+#                         alpha.f = 150/255),
+#       lwd = 3,
+#       lend = 'butt')
 cd_0.5 = DescriptCplot(m = 0,
               k = 0.5,
               ndata = 20,
               sdcol = NA,
               denscol = NA,
+              refline = c0,
               save_sample = TRUE)
-lines(x = c(0,0),
-      y = c(0,1),
-      col = adjustcolor(col = 'gray', 
-                        alpha.f = 150/255),
-      lwd = 3,
-      lend = 'butt')
+# lines(x = c(0,0),
+#       y = c(0,1),
+#       col = adjustcolor(col = 'gray', 
+#                         alpha.f = 150/255),
+#       lwd = 3,
+#       lend = 'butt')
+
+ci_kappa = CI_unwrap(data = data.frame(y = rad(c(cd_3, cd_0.5)),
+                                    x = c(rep(0, length(cd_3)),
+                                             rep(1, length(cd_0.5)))
+                                    ),
+                  formula = bf(y~x,
+                               kappa~x),
+                  # prior = prior('normal(0, pi())', class = 'Intercept', dpar = 'mu') + 
+                  #           prior('normal(10,10)', class = 'Intercept', dpar = 'kappa'),                  
+                  est_kappa = TRUE,
+                  return_model = TRUE,
+                  backend = 'cmdstan'#faster and more reliable
+)
+
+PlotCI_vM(ci_vec = deg(ci_kappa$mu),
+          col = adjustcolor('darkred', alpha.f = 100/255),
+          lwd = 7,
+          radius = 1.35)
+PlotCI_vM(ci_vec = deg(ci_kappa$mu_x),
+          col = adjustcolor('red', alpha.f = 100/255),
+          lwd = 7,
+          radius = 1.25)
+with(ci_kappa,
+     arrows.circular(x = circular(mu[2],
+                                  rotation = 'clock',
+                                  zero = pi/2),
+                     y = A1(kappa[2]),
+                     lwd = 1,
+                     length = 0.05,
+                     col = 'darkred')
+)
+with(ci_kappa,
+     arrows.circular(x = circular(mu_x[2],
+                                  rotation = 'clock',
+                                  zero = pi/2),
+                     y = A1(kappa_x[2]),
+                     lwd = 1,
+                     length = 0.05,
+                     col = 'red')
+)
+with(ci_kappa,
+     {
+       arrows(x0 = sin(mu[2])*A1(kappa[1]),
+              x1 = sin(mu[2])*A1(kappa[3]),
+              y0 = cos(mu[2])*A1(kappa[1]),
+              y1 = cos(mu[2])*A1(kappa[3]),
+              lwd = 7,
+              col = adjustcolor(col = 'darkred',
+                                alpha.f = 100/255),
+              length = 0.05,
+              angle = 90,
+              code = 3,
+              lend = 'butt'
+       )
+     }
+)
+with(ci_kappa,
+     {
+       arrows(x0 = sin(mu_x[2])*A1(kappa_x[1]),
+              x1 = sin(mu_x[2])*A1(kappa_x[3]),
+              y0 = cos(mu_x[2])*A1(kappa_x[1]),
+              y1 = cos(mu_x[2])*A1(kappa_x[3]),
+              lwd = 7,
+              col = adjustcolor(col = 'red',
+                                alpha.f = 100/255),
+              length = 0.05,
+              angle = 90,
+              code = 3,
+              lend = 'butt'
+       )
+     }
+)
+
 
 watson.two.test(cd_3, cd_0.5)#no difference detected
 
-# Simulate datasets with low interindiv correlation ---------------------------------------
+# High interindiv correlation ---------------------------------------
+set.seed(0120810506)#ISBN Batschelet, 1981
+kappa_mu1 = 2.0
+kappa_id1 = 5.0
+
+ndata = 10 # moderate sample size
+
+dt1 = rvonmises(n = 10,
+                mu = c0,
+                kappa = kappa_mu1)
+print(round(dt1))
+
+par(pty = 's')
+par(mar = c(0,0,0,0))
+par(mfrow = c(3,4))
+dt_id1 = lapply(X = dt1, #rev(kd), # should this be largest to smallest?
+                FUN = DescriptCplot,
+                save_sample = TRUE,
+                k = kappa_id1,
+                ndata = 20,
+                refline = 0,
+                sdcol = NA,
+                denscol = NA)
+#Add the population of biases
+DescriptCplot(k = kappa_mu1,
+              ndata = 10,
+              refline = 0,
+              sdcol = NA,
+              denscol = NA,
+              pcol = NA,
+              cicol = col_sd,
+              mvcol = col_sd
+)
+points.circular(dt1,
+                bins = 360/5-1,
+                stack = TRUE,
+                sep = 0.05,
+                shrink = 1.25,
+                col = col_rho
+)
+
+dt_comb1 = do.call(what = c,
+                   args = dt_id1)
+PCfun(angles = dt_comb1,
+      col = 'gray25',
+      shrink = 3.0)
+mle_comb1 = mle.vonmises(x = dt_comb1,bias = TRUE)
+ci_comb1 = with(mle_comb1,
+                CI_vM(angles = dt_comb1,
+                      m1 = mu,
+                      k1 = kappa,
+                      alternative = 'two.sided')
+)
+with(mle_comb1,
+     {
+       arrows.circular(x = circular(mu,
+                                    units = 'degrees',
+                                    rotation = 'clock',
+                                    zero = pi/2),
+                       y = A1(kappa),
+                       lwd = 3,
+                       col = col_pdf,
+                       length = 0.1
+       )
+     }
+)
+PlotCI_vM(ci_vec = ci_comb1,
+          col = col_pdf)
+rayleigh.test(dt_comb1)
+rayleigh.test(dt_comb1[1+0:9 * 20])
+
+
+# Low interindiv correlation ---------------------------------------
 set.seed(0120810506)#ISBN Batschelet, 1981
 kappa_mu = 0.1
 kappa_id = 5.0
@@ -622,6 +944,7 @@ ndata = 10 # moderate sample size
 dt2 = rvonmises(n = 10,
                 mu = c0,
                 kappa = kappa_mu)
+print(round(dt2))
 
 par(pty = 's')
 par(mar = c(0,0,0,0))
@@ -679,10 +1002,13 @@ arrows.circular(x = circular(mu,
 )
 PlotCI_vM(ci_vec = ci_comb2,
           col = col_pdf)
+mtext(text = paste0('(',paste(signif(ci_comb2[-2], 2), collapse = ' '), ')'),
+      side = 1,
+      line = -1)
 rayleigh.test(dt_comb2)
 rayleigh.test(dt_comb2[1+0:9 * 20])
 
-# Simulate dataset with variable individual parameters ---------------------------------------
+# Variable individual parameters ---------------------------------------
 set.seed(0120810506)#ISBN Batschelet, 1981
 kappa_mu_var = 1.0
 kappa_var_mean = 1.5
